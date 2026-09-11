@@ -8,12 +8,21 @@ import * as chat from './views/chat.js';
 import * as distill from './views/distill.js';
 import * as settings from './views/settings.js';
 
-const app = document.getElementById('app');
+let app = document.getElementById('app');
+
 const nav = document.getElementById('nav');
 
 export const state = {
   config: { llm: { provider: 'mock' }, image: { enabled: false } },
 };
+
+// 每次路由切换用空壳节点替换 #app：视图挂在旧节点上的监听器随之全部丢弃，
+// 避免跨页面堆积（否则角色列表与档案页同名 data-action 会互相串扰，重复弹窗）。
+function resetApp() {
+  const fresh = app.cloneNode(false);
+  app.replaceWith(fresh);
+  app = fresh;
+}
 
 const routes = [
   { re: /^#\/distill$/, nav: 'characters', view: () => distill.render(app) },
@@ -33,6 +42,7 @@ async function route() {
     try { cleanup(); } catch { /* ignore */ }
     cleanup = null;
   }
+  resetApp();
   const hash = location.hash || '#/';
   for (const r of routes) {
     const m = hash.match(r.re);

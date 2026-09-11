@@ -26,7 +26,9 @@
 html { height: 100%; }
 body {
   margin: 0;
-  height: 100%;
+  /* 不固定 height：短页面由 min-height 撑满视口（导航贴底），
+     长页面 body 随内容增长，sticky 导航在滚动中吸附视口底部，
+     滚到底时停在内容之后——最后的内容不会被导航挡住。 */
   display: flex;
   flex-direction: column;
   min-height: 100dvh;
