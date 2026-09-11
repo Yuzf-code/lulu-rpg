@@ -44,8 +44,13 @@ func main() {
 		lp = llm.NewMock()
 		logger.Printf("剧情写手：内置演示模式（Mock）。接入真实模型请设置 LLM_PROVIDER=openai LLM_BASE_URL=… LLM_MODEL=…")
 	default:
-		lp = llm.NewOpenAICompat(cfg.LLM.BaseURL, cfg.LLM.APIKey, cfg.LLM.Model, cfg.LLM.Timeout)
+		client := llm.NewOpenAICompat(cfg.LLM.BaseURL, cfg.LLM.APIKey, cfg.LLM.Model, cfg.LLM.Timeout)
+		client.ReasoningEffort = cfg.LLM.ReasoningEffort
+		lp = client
 		logger.Printf("剧情写手：%s @ %s", cfg.LLM.Model, cfg.LLM.BaseURL)
+		if cfg.LLM.ReasoningEffort != "" {
+			logger.Printf("思考模型推理力度：%s", cfg.LLM.ReasoningEffort)
+		}
 	}
 	if cfg.HTTPProxy != "" {
 		logger.Printf("出站代理（LLM/图像）：%s", cfg.HTTPProxy)

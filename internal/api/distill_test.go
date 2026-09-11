@@ -28,19 +28,19 @@ func TestDistillAndDraftsAPI(t *testing.T) {
 	// 缺名称
 	jreq(t, ts, "POST", "/api/characters/generate-draft", map[string]any{"kind": "greeting"}, 400)
 
-	// 蒸馏：显式对象 + 主体
-	r = jreq(t, ts, "POST", "/api/characters/distill", map[string]any{
-		"text": "一段关于艾莉娅在雾谷活动的小说文本，篇幅足够提取设定。", "subject": "林远", "targets": []string{"艾莉娅"},
+	// 人物识别
+	r = jreq(t, ts, "POST", "/api/characters/distill-detect", map[string]any{
+		"text": "一段关于艾莉娅的小说文本。",
 	}, 200)
-	drafts := r["drafts"].([]any)
-	if len(drafts) != 1 {
-		t.Fatalf("应有一个蒸馏结果: %v", r)
+	if names := r["targets"].([]any); len(names) == 0 {
+		t.Fatal("人物识别结果为空")
 	}
-	d0 := drafts[0].(map[string]any)
-	if d0["target"] != "艾莉娅" {
-		t.Fatalf("蒸馏对象错误: %v", d0)
-	}
-	c := d0["character"].(map[string]any)
+
+	// 蒸馏：单对象 + 主体
+	r = jreq(t, ts, "POST", "/api/characters/distill", map[string]any{
+		"text": "一段关于艾莉娅在雾谷活动的小说文本，篇幅足够提取设定。", "subject": "林远", "target": "艾莉娅",
+	}, 200)
+	c := r["character"].(map[string]any)
 	if c["name"] != "艾莉娅" {
 		t.Fatalf("卡名错误: %v", c)
 	}
@@ -49,8 +49,18 @@ func TestDistillAndDraftsAPI(t *testing.T) {
 		t.Fatalf("主体关系缺失: %v", rels)
 	}
 
-	// 空原文
-	jreq(t, ts, "POST", "/api/characters/distill", map[string]any{"text": "  "}, 400)
+	// 空原文 / 缺对象
+	jreq(t, ts, "POST", "/api/characters/distill", map[string]any{"text": "  ", "target": "x"}, 400)
+	jreq(t, ts, "POST", "/api/characters/distill", map[string]any{"text": "有原文", "target": ""}, 400)
+
+	// 风格蒸馏
+	r = jreq(t, ts, "POST", "/api/characters/distill-style", map[string]any{
+		"text": "一段关于艾莉娅的小说文本。",
+	}, 200)
+	st := r["style"].(map[string]any)
+	if st["name"] == "" || st["description"] == "" {
+		t.Fatalf("风格草稿不完整: %v", st)
+	}
 
 	// 蒸馏增强已有卡：合并结果应保留原卡名并带来新头衔
 	charA := jreq(t, ts, "POST", "/api/characters", map[string]any{

@@ -56,7 +56,8 @@ export async function renderEditor(root, id) {
       <header class="page-head">
         <a class="icon-btn" href="#/characters">←</a>
         <div><h1>${card ? '编辑角色' : '创建角色卡'}</h1></div>
-        <button class="btn small" data-action="distill">🧪 文本蒸馏</button>
+        ${card ? '<button class="btn small" data-action="distill">🧪 蒸馏增强</button>'
+               : '<a class="btn small" href="#/distill">🧪 文本蒸馏</a>'}
         ${card ? `<button class="btn danger-ghost" data-action="del">删除</button>` : ''}
       </header>
       <form class="editor" id="char-form">
@@ -277,44 +278,31 @@ function importIntoForm(draft, addDialogueRow) {
 
 function distillModal(card, root, { importDraft }) {
   const m = modal(`
-    <h2>🧪 从文本蒸馏角色卡</h2>
-    <p class="hint">粘贴小说、跑团记录、设定文档等原文，提取角色卡；编辑已有角色时可选择「增强合并」。</p>
+    <h2>🧪 蒸馏增强「${esc(card.name)}」</h2>
+    <p class="hint">粘贴与该角色相关的原文，AI 在现有设定基础上补全与丰富（同主体关系以新分析为准）。新建角色请用「🎭 角色卡」页的独立蒸馏入口。</p>
     <label class="field"><span>原文 *</span>
-      <textarea id="ds-text" rows="8" placeholder="粘贴包含目标人物的文本……（上限 16000 字）"></textarea></label>
-    <label class="field"><span>蒸馏对象（逗号分隔；留空由 AI 自动识别，最多 5 个）</span>
-      <input id="ds-targets" placeholder="${esc(card ? card.name : '例如：艾莉娅，老巴德')}" /></label>
-    <label class="field"><span>主体（可选：蒸馏对象对其的态度/关系，如你的档案名或另一角色名）</span>
+      <textarea id="ds-text" rows="8" placeholder="粘贴包含该角色的文本……（上限 16000 字）"></textarea></label>
+    <label class="field"><span>主体（可选：蒸馏其对主体的态度/关系）</span>
       <input id="ds-subject" placeholder="例如：林远" /></label>
-    ${card ? `
-    <label class="switch-row"><span>增强当前「${esc(card.name)}」（结果与现有设定合并）</span>
-      <input type="checkbox" id="ds-enhance" checked /><i class="switch"></i></label>` : ''}
     <div class="modal-actions">
       <button class="btn" data-close>取消</button>
       <button class="btn primary" data-action="run">开始蒸馏</button>
     </div>`);
 
   m.root.addEventListener('click', async (e) => {
-    if (e.target.matches('[data-close]')) return m.close();
+    if (e.target.closest('[data-close]')) return m.close();
     if (!e.target.closest('[data-action="run"]')) return;
 
     const text = m.root.querySelector('#ds-text').value.trim();
     if (!text) return toast('请粘贴原文', 'error');
     const subject = m.root.querySelector('#ds-subject').value.trim();
-    const targets = m.root.querySelector('#ds-targets').value.split(/[，,]/).map((s) => s.trim()).filter(Boolean);
-    const enhance = m.root.querySelector('#ds-enhance');
 
     const btn = m.root.querySelector('[data-action="run"]');
-    btn.disabled = true; btn.textContent = '🧪 蒸馏中…';
+    btn.disabled = true; btn.textContent = '🧪 蒸馏中…（单次请求，请稍候）';
     try {
-      let drafts;
-      if (enhance && enhance.checked) {
-        const r = await api.distillInto(card.id, text, subject);
-        drafts = [{ target: card.name, character: r.character }];
-      } else {
-        drafts = (await api.distill(text, subject, targets)).drafts;
-      }
+      const r = await api.distillInto(card.id, text, subject);
       m.close();
-      draftsModal(drafts, importDraft);
+      draftsModal([{ target: card.name, character: r.character }], importDraft);
     } catch (err) {
       toast(err.message, 'error');
       btn.disabled = false; btn.textContent = '开始蒸馏';

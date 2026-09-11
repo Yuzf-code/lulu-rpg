@@ -48,6 +48,8 @@ func (s *Server) routes() {
 	m.HandleFunc("DELETE /api/characters/{id}", s.deleteCharacter)
 	m.HandleFunc("POST /api/characters/{id}/avatar", s.generateCharacterAvatar)
 	m.HandleFunc("POST /api/characters/distill", s.distillCharacters)
+	m.HandleFunc("POST /api/characters/distill-detect", s.distillDetect)
+	m.HandleFunc("POST /api/characters/distill-style", s.distillStyle)
 	m.HandleFunc("POST /api/characters/{id}/distill", s.distillIntoCharacter)
 	m.HandleFunc("POST /api/characters/generate-draft", s.generateCardDraft)
 

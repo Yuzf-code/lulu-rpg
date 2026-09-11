@@ -22,45 +22,44 @@ func TestExtractJSON(t *testing.T) {
 	}
 }
 
-func TestDistillWithMock(t *testing.T) {
+func TestDistillOne(t *testing.T) {
 	e := New(nil, &llm.Mock{}, nil, testCfg())
-	out, err := e.Distill(t.Context(), "这是一段小说文本，讲述艾莉娅与老巴德的故事。", "林远", []string{"艾莉娅", "老巴德"})
+	card, err := e.DistillOne(t.Context(), "这是一段小说文本，讲述艾莉娅的故事。", "林远", "艾莉娅")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(out.Characters) != 2 {
-		t.Fatalf("应有两个结果: %d", len(out.Characters))
-	}
-	if out.Characters[0].Character == nil || out.Characters[0].Character.Name != "艾莉娅" {
-		t.Fatalf("第一张卡错误: %+v", out.Characters[0])
+	if card.Name != "艾莉娅" {
+		t.Fatalf("卡名错误: %+v", card)
 	}
 	// 指定主体时应生成对主体的关系。
-	rels := out.Characters[0].Character.Relationships
-	if len(rels) == 0 || rels[0].Subject != "林远" {
-		t.Fatalf("主体关系缺失: %+v", rels)
+	if len(card.Relationships) == 0 || card.Relationships[0].Subject != "林远" {
+		t.Fatalf("主体关系缺失: %+v", card.Relationships)
 	}
-	// 应同时产出分视角的写作风格草稿。
-	if out.Style == nil || out.Style.Name == "" || !strings.Contains(out.Style.Description, "[旁白]") {
-		t.Fatalf("风格草稿缺失或未分视角: %+v", out.Style)
+	// 缺对象应报错。
+	if _, err := e.DistillOne(t.Context(), "文本", "", ""); err == nil {
+		t.Fatal("缺蒸馏对象应报错")
 	}
 }
 
-func TestDistillAutoDetectTargets(t *testing.T) {
+func TestDetectTargets(t *testing.T) {
 	e := New(nil, &llm.Mock{}, nil, testCfg())
-	// Mock 的蒸馏任务在 Target 为空时返回默认名字「无名旅人」→ 能解析出人物。
-	out, err := e.Distill(t.Context(), "一些文本", "", nil)
+	names, err := e.DetectTargets(t.Context(), "一段文本")
+	if err != nil || len(names) == 0 {
+		t.Fatalf("人物识别失败: %v %v", names, err)
+	}
+	if _, err := e.DetectTargets(t.Context(), "  "); err == nil {
+		t.Fatal("空原文应报错")
+	}
+}
+
+func TestDistillStyleDraft(t *testing.T) {
+	e := New(nil, &llm.Mock{}, nil, testCfg())
+	st, err := e.DistillStyle(t.Context(), "一段文本")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(out.Characters) == 0 || out.Characters[0].Character == nil {
-		t.Fatalf("自动识别蒸馏失败: %+v", out)
-	}
-}
-
-func TestDistillEmptyText(t *testing.T) {
-	e := New(nil, &llm.Mock{}, nil, testCfg())
-	if _, err := e.Distill(t.Context(), "  ", "", []string{"x"}); err == nil {
-		t.Fatal("空原文应报错")
+	if st.Name == "" || !strings.Contains(st.Description, "[旁白]") {
+		t.Fatalf("风格草稿缺失或未分视角: %+v", st)
 	}
 }
 

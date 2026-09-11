@@ -368,7 +368,7 @@ func (e *Engine) maybeCompact(sessionID string) {
 			{Role: llm.RoleUser, Content: sb.String()},
 		},
 		Temperature: 0.3,
-		MaxTokens:   512,
+		MaxTokens:   2048,
 		Mock:        llm.MockHint{Task: llm.TaskSummary, CharNames: charNames(sess.Characters)},
 	}
 	out, err := e.llm.Complete(ctx, req)

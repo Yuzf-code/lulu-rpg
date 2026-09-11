@@ -50,8 +50,10 @@ export const api = {
   generateAvatar: (name, appearance) => req('POST', '/api/avatars/generate', { name, appearance }),
   generateImage: (prompt) => req('POST', '/api/images/generate', { prompt }),
 
-  // 蒸馏 / 草稿 / 灵感
-  distill: (text, subject, targets) => req('POST', '/api/characters/distill', { text, subject, targets }),
+  // 蒸馏 / 草稿 / 灵感（蒸馏由前端逐个请求，一次一个对象）
+  detectTargets: (text) => req('POST', '/api/characters/distill-detect', { text }),
+  distillCharacter: (text, subject, target) => req('POST', '/api/characters/distill', { text, subject, target }),
+  distillStyle: (text) => req('POST', '/api/characters/distill-style', { text }),
   distillInto: (id, text, subject) => req('POST', `/api/characters/${id}/distill`, { text, subject }),
   generateCardDraft: (kind, seed) => req('POST', '/api/characters/generate-draft', { kind, ...seed }),
   inspiration: (sessionId) => req('POST', `/api/sessions/${sessionId}/inspiration`, {}),

@@ -19,7 +19,10 @@ type OpenAICompat struct {
 	Model   string
 	Timeout time.Duration
 	Proxy   string // 为空时直连（忽略环境的 http_proxy，避免局域网请求被代理劫持）
-	Client  *http.Client
+	// 思考型模型的推理力度："none" 关闭思考（Ollama 实测有效），
+	// 空 = 不发送该字段。非 qwen/o 系后端通常会忽略未知参数，无副作用。
+	ReasoningEffort string
+	Client          *http.Client
 }
 
 // NewOpenAICompat 创建客户端。
@@ -45,7 +48,9 @@ type chatRequest struct {
 	Messages    []Message `json:"messages"`
 	Temperature float32   `json:"temperature,omitempty"`
 	MaxTokens   int       `json:"max_tokens,omitempty"`
-	Stream      bool      `json:"stream"`
+	// 思考型模型的推理力度（如 Ollama: "none" 关闭思考）。空则不发送。
+	ReasoningEffort string `json:"reasoning_effort,omitempty"`
+	Stream          bool   `json:"stream"`
 }
 
 type chatChoice struct {
@@ -77,11 +82,12 @@ func (c *OpenAICompat) do(ctx context.Context, req Request, stream bool, onChunk
 		defer cancel()
 	}
 	body, err := json.Marshal(chatRequest{
-		Model:       c.Model,
-		Messages:    req.Messages,
-		Temperature: req.Temperature,
-		MaxTokens:   req.MaxTokens,
-		Stream:      stream,
+		Model:           c.Model,
+		Messages:        req.Messages,
+		Temperature:     req.Temperature,
+		MaxTokens:       req.MaxTokens,
+		ReasoningEffort: c.ReasoningEffort,
+		Stream:          stream,
 	})
 	if err != nil {
 		return "", err

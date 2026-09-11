@@ -12,7 +12,7 @@
 | 模块 | 说明 |
 | --- | --- |
 | 角色卡 | 名称 / 头衔 / 性格 / 背景 / 外貌 / 标签 / 关系 / 开场白 / 对话示例；头像支持**上传**或 **AI 生成**（按名称+外貌） |
-| 文本蒸馏 | 独立入口（🎭 角色卡页 → 🧪 文本蒸馏）：粘贴小说/跑团记录等原文，**并行蒸馏多张角色卡草稿**（可指定 1~5 个对象，留空自动识别）；可指定**主体**，蒸馏对象对主体的态度/关系；同时提炼**分视角的写作风格**（旁白/台词/动作/内心各自的笔触）；编辑已有卡时还可选择**增强合并** |
+| 文本蒸馏 | 独立入口（🎭 角色卡页 → 🧪 文本蒸馏）：粘贴小说/跑团记录等原文，**逐个蒸馏角色卡草稿**（前端驱动，一次一个请求，成功即展示即保存）（可指定 1~5 个对象，留空自动识别）；可指定**主体**，蒸馏对象对主体的态度/关系；同时提炼**分视角的写作风格**（旁白/台词/动作/内心各自的笔触）；编辑已有卡时还可选择**增强合并** |
 | AI 草稿 | 开场白、对话示例可一键生成草稿，导入表单后自由修改 |
 | 写作风格 | 蒸馏提炼或手动创建；**开局新游戏时可选**，注入写手系统提示词，约束各视角行的笔触与氛围；派生私聊自动沿用主线风格 |
 | 行动灵感 | 输入框旁「✨ 灵感」按钮：按当前剧情生成 4~6 条建议（台词与导演指令混合），点选即填入输入框 |
@@ -77,7 +77,9 @@ go test ./...             # 全量测试
 | `IMG_MODEL` | 留空=关闭配图；`mock`=占位画师；否则走 `IMG_BASE_URL` 的 `/images/generations` |
 | `IMG_BASE_URL` / `IMG_API_KEY` / `IMG_SIZE` | 图像服务接入点 |
 
-其他可调项（上下文长度、摘要阈值、温度等）见 `.env.example`。
+其他可调项（超时、上下文长度、摘要阈值、温度等）见 `.env.example`。
+
+**思考型模型（qwen3 系等）**：设 `LLM_REASONING_EFFORT=none` 关闭思考——否则蒸馏/风格/灵感等辅助任务的输出预算会被 `<think>` 推理耗尽（表现为「模型未返回任何内容」），剧情生成也会显著变慢。
 
 **剧情写手输出协议**：模型被约束逐行输出 `[旁白]…`、`[角色名·动作]…`、`[角色名·内心]…`、`[角色名]台词` 格式，服务端流式解析为「带归属的分段」；未打标签但以已知角色名开头的行会被自动纠正。该协议对 JSON 能力较弱的中小模型非常稳健。
 
@@ -101,6 +103,7 @@ GET    /api/health                       GET   /api/config
 GET|POST /api/characters                 GET|PUT|DELETE /api/characters/{id}
 POST   /api/characters/{id}/avatar       POST  /api/avatars/generate
 POST   /api/characters/distill           POST  /api/characters/{id}/distill
+POST   /api/characters/distill-detect    POST  /api/characters/distill-style
 POST   /api/characters/generate-draft   GET|POST /api/styles  PUT|DELETE /api/styles/{id}
 GET|POST /api/personas                   GET|PUT|DELETE /api/personas/{id}
 POST   /api/personas/{id}/default

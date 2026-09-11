@@ -10,27 +10,55 @@ import (
 // ---- 角色卡蒸馏 / 草稿 / 灵感 ----
 
 type distillPayload struct {
-	Text    string   `json:"text"`    // 原文
-	Subject string   `json:"subject"` // 可选主体：蒸馏对象对其的态度/关系
-	Targets []string `json:"targets"` // 蒸馏对象名；留空自动识别
+	Text    string `json:"text"`    // 原文
+	Subject string `json:"subject"` // 可选主体：蒸馏对象对其的态度/关系
+	Target  string `json:"target"`  // 单个蒸馏对象名
 }
 
-// distillCharacters 从原文蒸馏角色卡草稿（不直接落库，由前端确认后保存）。
+// distillDetect 让模型从原文中识别人物名（前端逐个蒸馏前先调一次）。
+func (s *Server) distillDetect(w http.ResponseWriter, r *http.Request) {
+	var p distillPayload
+	if !readJSON(w, r, &p) {
+		return
+	}
+	targets, err := s.engine.DetectTargets(r.Context(), p.Text)
+	if err != nil {
+		httpError(w, userOrUpstream(err), err.Error())
+		return
+	}
+	if targets == nil {
+		targets = []string{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"targets": targets})
+}
+
+// distillCharacters 蒸馏单个对象，返回一张角色卡草稿（不落库）。
+// 顺序由前端控制：每次请求只蒸一个，成功即返回即展示。
 func (s *Server) distillCharacters(w http.ResponseWriter, r *http.Request) {
 	var p distillPayload
 	if !readJSON(w, r, &p) {
 		return
 	}
-	if strings.TrimSpace(p.Text) == "" {
-		httpError(w, http.StatusBadRequest, "请提供要蒸馏的原文")
-		return
-	}
-	out, err := s.engine.Distill(r.Context(), p.Text, p.Subject, p.Targets)
+	card, err := s.engine.DistillOne(r.Context(), p.Text, p.Subject, p.Target)
 	if err != nil {
 		httpError(w, userOrUpstream(err), err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, http.StatusOK, map[string]any{"character": card})
+}
+
+// distillStyle 从原文提炼分视角的写作风格草稿（不落库）。
+func (s *Server) distillStyle(w http.ResponseWriter, r *http.Request) {
+	var p distillPayload
+	if !readJSON(w, r, &p) {
+		return
+	}
+	st, err := s.engine.DistillStyle(r.Context(), p.Text)
+	if err != nil {
+		httpError(w, userOrUpstream(err), err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"style": st})
 }
 
 // distillIntoCharacter 蒸馏并增强已有角色卡，返回融合后的草稿。

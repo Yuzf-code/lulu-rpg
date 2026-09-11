@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 
 	"lulu-rpg/internal/llm"
@@ -27,71 +28,53 @@ type DistilledCard struct {
 	Relationships    []store.Relationship    `json:"relationships"`
 }
 
-// DistillResult 是单个蒸馏对象的结果（失败时带 error）。
-type DistillResult struct {
-	Target    string         `json:"target"`
-	Character *DistilledCard `json:"character,omitempty"`
-	Error     string         `json:"error,omitempty"`
-}
-
 // DistilledStyle 是从文本中提炼的写作风格草稿。
 type DistilledStyle struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 }
 
-// DistillOutput 是一次完整蒸馏的产出：角色卡草稿 + 写作风格草稿。
-type DistillOutput struct {
-	Characters []DistillResult `json:"drafts"`
-	Style      *DistilledStyle `json:"style,omitempty"`
-	StyleError string          `json:"style_error,omitempty"`
-}
-
 // maxDistillText 限制蒸馏输入原文长度（rune），保护小上下文模型。
 const maxDistillText = 16000
 
-// Distill 从原文中蒸馏角色卡草稿与写作风格。
-// targets 为空时先让模型识别人物；subject 指定“主体”时，额外蒸馏
-// 各对象对主体的态度/关系。
-func (e *Engine) Distill(ctx context.Context, text, subject string, targets []string) (*DistillOutput, error) {
+// 请求长度守卫：原文过长直接拒绝（由调用方返回 400）。
+func checkDistillText(text string) error {
 	text = strings.TrimSpace(text)
 	if text == "" {
-		return nil, fmt.Errorf("原文不能为空")
+		return fmt.Errorf("原文不能为空")
 	}
 	if len([]rune(text)) > maxDistillText {
-		return nil, fmt.Errorf("原文过长（上限 %d 字），请分段蒸馏", maxDistillText)
+		return fmt.Errorf("原文过长（上限 %d 字），请分段蒸馏", maxDistillText)
 	}
-	if len(targets) == 0 {
-		var err error
-		targets, err = e.detectTargets(ctx, text)
-		if err != nil {
-			return nil, err
-		}
-		if len(targets) == 0 {
-			return nil, fmt.Errorf("未能从原文中识别出可蒸馏的人物，请手动指定对象")
-		}
+	return nil
+}
+
+// DistillOne 蒸馏单个对象，返回一张角色卡草稿。
+// 由前端逐个调用：成功一个渲染一个，调用方自行控制顺序与重试。
+func (e *Engine) DistillOne(ctx context.Context, text, subject, target string) (*DistilledCard, error) {
+	if err := checkDistillText(text); err != nil {
+		return nil, err
 	}
-	if len(targets) > 5 {
-		targets = targets[:5]
+	if strings.TrimSpace(target) == "" {
+		return nil, fmt.Errorf("请指定蒸馏对象")
 	}
-	out := &DistillOutput{}
-	// 逐个串行蒸馏（本地小模型并发吃不满显存还互相拖慢），最后提炼风格。
-	results := make([]DistillResult, 0, len(targets))
-	for _, target := range targets {
-		card, err := e.distillOne(ctx, text, target, subject, nil)
-		if err != nil {
-			results = append(results, DistillResult{Target: target, Error: err.Error()})
-			continue
-		}
-		results = append(results, DistillResult{Target: target, Character: card})
+	return e.distillOne(ctx, text, target, subject, nil)
+}
+
+// DetectTargets 让模型从原文中识别可蒸馏的人物名（前端自动识别时调用）。
+func (e *Engine) DetectTargets(ctx context.Context, text string) ([]string, error) {
+	if err := checkDistillText(text); err != nil {
+		return nil, err
 	}
-	out.Characters = results
-	if st, err := e.distillStyle(ctx, text); err != nil {
-		out.StyleError = err.Error()
-	} else {
-		out.Style = st
+	return e.detectTargets(ctx, text)
+}
+
+// DistillStyle 从文本中提炼分视角的写作风格草稿。
+func (e *Engine) DistillStyle(ctx context.Context, text string) (*DistilledStyle, error) {
+	if err := checkDistillText(text); err != nil {
+		return nil, err
 	}
-	return out, nil
+	return e.distillStyle(ctx, text)
 }
 
 // DistillInto 蒸馏并融合进已有角色卡：模型在原卡设定基础上结合原文
@@ -142,14 +125,19 @@ func (e *Engine) distillOne(ctx context.Context, text, target, subject string, b
 	out, err := e.llm.Complete(ctx, llm.Request{
 		Messages:    []llm.Message{{Role: llm.RoleSystem, Content: sys}, {Role: llm.RoleUser, Content: user.String()}},
 		Temperature: 0.5,
-		MaxTokens:   1200,
+		MaxTokens:   4096,
 		Mock:        llm.MockHint{Task: llm.TaskDistill, Target: target, Subject: subject},
 	})
 	if err != nil {
 		return nil, err
 	}
+	out, err = requireContent(out, "蒸馏")
+	if err != nil {
+		return nil, err
+	}
 	var card DistilledCard
 	if err := extractJSON(out, &card); err != nil {
+		logRaw("蒸馏", out)
 		return nil, fmt.Errorf("蒸馏结果解析失败: %w", err)
 	}
 	if strings.TrimSpace(card.Name) == "" {
@@ -188,14 +176,19 @@ func (e *Engine) distillStyle(ctx context.Context, text string) (*DistilledStyle
 			{Role: llm.RoleUser, Content: clip(text, maxDistillText)},
 		},
 		Temperature: 0.4,
-		MaxTokens:   300,
+		MaxTokens:   2048,
 		Mock:        llm.MockHint{Task: llm.TaskStyle},
 	})
 	if err != nil {
 		return nil, err
 	}
+	out, err = requireContent(out, "风格提炼")
+	if err != nil {
+		return nil, err
+	}
 	var st DistilledStyle
 	if err := extractJSON(out, &st); err != nil {
+		logRaw("风格提炼", out)
 		return nil, fmt.Errorf("风格解析失败: %w", err)
 	}
 	if strings.TrimSpace(st.Name) == "" {
@@ -275,14 +268,19 @@ func (e *Engine) detectTargets(ctx context.Context, text string) ([]string, erro
 			{Role: llm.RoleUser, Content: clip(text, maxDistillText)},
 		},
 		Temperature: 0.2,
-		MaxTokens:   100,
+		MaxTokens:   1024,
 		Mock:        llm.MockHint{Task: llm.TaskDetect},
 	})
 	if err != nil {
 		return nil, err
 	}
+	out, err = requireContent(out, "人物识别")
+	if err != nil {
+		return nil, err
+	}
 	var names []string
 	if err := extractJSON(out, &names); err != nil {
+		logRaw("人物识别", out)
 		return nil, fmt.Errorf("人物识别失败: %w", err)
 	}
 	clean := names[:0]
@@ -317,9 +315,13 @@ func (e *Engine) DraftGreeting(ctx context.Context, seed CardSeed) (string, erro
 	out, err := e.llm.Complete(ctx, llm.Request{
 		Messages:    []llm.Message{{Role: llm.RoleSystem, Content: sys}, {Role: llm.RoleUser, Content: cardSeedPrompt(seed)}},
 		Temperature: 0.8,
-		MaxTokens:   400,
+		MaxTokens:   1024,
 		Mock:        llm.MockHint{Task: llm.TaskGreeting, Target: seed.Name},
 	})
+	if err != nil {
+		return "", err
+	}
+	out, err = requireContent(out, "开场白草稿")
 	if err != nil {
 		return "", err
 	}
@@ -336,14 +338,19 @@ func (e *Engine) DraftDialogues(ctx context.Context, seed CardSeed) ([]store.Exa
 	out, err := e.llm.Complete(ctx, llm.Request{
 		Messages:    []llm.Message{{Role: llm.RoleSystem, Content: sys}, {Role: llm.RoleUser, Content: cardSeedPrompt(seed)}},
 		Temperature: 0.8,
-		MaxTokens:   600,
+		MaxTokens:   2048,
 		Mock:        llm.MockHint{Task: llm.TaskDialogues, Target: seed.Name},
 	})
 	if err != nil {
 		return nil, err
 	}
+	out, err = requireContent(out, "对话示例草稿")
+	if err != nil {
+		return nil, err
+	}
 	var rows []store.ExampleDialogue
 	if err := extractJSON(out, &rows); err != nil {
+		logRaw("对话示例草稿", out)
 		return nil, fmt.Errorf("对话示例解析失败: %w", err)
 	}
 	clean := rows[:0]
@@ -422,14 +429,19 @@ func (e *Engine) Inspiration(ctx context.Context, sess *store.Session) ([]Inspir
 	out, err := e.llm.Complete(ctx, llm.Request{
 		Messages:    []llm.Message{{Role: llm.RoleSystem, Content: sys}, {Role: llm.RoleUser, Content: user.String()}},
 		Temperature: 0.9,
-		MaxTokens:   600,
+		MaxTokens:   1536,
 		Mock:        llm.MockHint{Task: llm.TaskInspiration, PersonaName: personaName(persona), CharNames: charNames(sess.Characters)},
 	})
 	if err != nil {
 		return nil, err
 	}
+	out, err = requireContent(out, "灵感")
+	if err != nil {
+		return nil, err
+	}
 	var rows []InspirationOption
 	if err := extractJSON(out, &rows); err != nil {
+		logRaw("灵感", out)
 		return nil, fmt.Errorf("灵感解析失败: %w", err)
 	}
 	clean := rows[:0]
@@ -455,9 +467,14 @@ func (e *Engine) Inspiration(ctx context.Context, sess *store.Session) ([]Inspir
 
 // ---- 宽松 JSON 提取 ----
 
-// extractJSON 从模型输出中尽力提取 JSON（容忍 markdown 代码块、前后缀噪声）。
+// extractJSON 从模型输出中尽力提取 JSON（容忍 markdown 代码块、前后缀噪声，
+// 以及思考型模型夹带的 <think>…</think> 段落）。
 func extractJSON(s string, target any) error {
 	s = strings.TrimSpace(s)
+	// 思考型模型（qwen3 等）可能在正文里夹带思考段，取最后一段 </think> 之后的内容。
+	if i := strings.LastIndex(s, "</think>"); i >= 0 {
+		s = strings.TrimSpace(s[i+len("</think>"):])
+	}
 	// 去掉 markdown 围栏。
 	if i := strings.Index(s, "```"); i >= 0 {
 		rest := s[i+3:]
@@ -485,6 +502,21 @@ func extractJSON(s string, target any) error {
 		return err
 	}
 	return nil
+}
+
+// requireContent 校验模型非空返回。思考型模型在输出预算不足时会「只思考、
+// 无正文」，这里给出可行动的错误提示而不是含糊的解析失败。
+func requireContent(out, task string) (string, error) {
+	out = strings.TrimSpace(out)
+	if out == "" {
+		return "", fmt.Errorf("模型未返回任何内容（思考型模型可能耗尽了本次输出预算），请重试一次")
+	}
+	return out, nil
+}
+
+// logRaw 输出解析失败时记录模型原文片段，便于诊断（截断到 400 字）。
+func logRaw(task, out string) {
+	log.Printf("[%s] 模型原始输出片段: %.400s", task, out)
 }
 
 // ---- 小工具 ----
