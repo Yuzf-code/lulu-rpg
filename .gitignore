@@ -1,0 +1,20 @@
+# 运行数据（SQLite、生成的图片等）
+data/
+
+# 本地环境配置
+.env
+
+# 构建产物
+/lulu-rpg
+*.exe
+*.test
+*.out
+
+# 编辑器 / 系统
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# 日志
+*.log

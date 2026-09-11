@@ -1,0 +1,57 @@
+# Lulu RPG 基础设施。
+#
+# 最快体验（无需任何模型，使用内置演示写手/画师）：
+#   docker compose up -d
+#
+# 接入真实大模型（任选其一）：
+#   1) 自带 Ollama profile：
+#        docker compose --profile ollama up -d
+#        docker compose exec ollama ollama pull qwen3:8b   # 或其他 27B 级模型
+#      并在 .env 中设置 LLM_PROVIDER=openai / LLM_BASE_URL=http://ollama:11434/v1 / LLM_MODEL=qwen3:8b
+#   2) 任意 OpenAI 兼容服务（vLLM / llama.cpp server / 聚合网关）：
+#      在 .env 中设置 LLM_BASE_URL / LLM_MODEL / LLM_API_KEY。
+services:
+  app:
+    build: .
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    environment:
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.9}
+      LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-1024}
+      IMG_MODEL: ${IMG_MODEL:-}
+      IMG_BASE_URL: ${IMG_BASE_URL:-}
+      IMG_API_KEY: ${IMG_API_KEY:-}
+      IMG_SIZE: ${IMG_SIZE:-1024x1024}
+      CONTEXT_RECENT_MESSAGES: ${CONTEXT_RECENT_MESSAGES:-20}
+      CONTEXT_MAX_TOKENS: ${CONTEXT_MAX_TOKENS:-6000}
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+    # 需要与主机上的 Ollama 通信时取消注释：
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"
+
+  # 可选：内置 Ollama（--profile ollama 启用）。
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ollama"]
+    volumes:
+      - ollama:/root/.ollama
+    ports:
+      - "11434:11434"
+    restart: unless-stopped
+    # 有 NVIDIA GPU 时取消注释以启用加速：
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+volumes:
+  ollama:
