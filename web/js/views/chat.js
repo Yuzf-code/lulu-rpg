@@ -55,12 +55,6 @@ export async function render(root, sessionId) {
               <button class="mode-btn on" data-mode="say">🗣 台词</button>
               <button class="mode-btn" data-mode="direct">🎬 导演</button>
               <span class="mode-hint" id="mode-hint">以你的角色身份说话</span>
-              <select id="think-sel" class="think-sel" title="模型思考档位：越高质量越好但越慢">
-                <option value="none">🧠 思考·关</option>
-                <option value="low">🧠 低</option>
-                <option value="medium">🧠 中</option>
-                <option value="high">🧠 高</option>
-              </select>
               <button class="mode-btn idea-btn" id="btn-inspire" title="根据当前剧情生成行动灵感">✨ 灵感</button>
             </div>
             <div class="composer-row">
@@ -313,18 +307,6 @@ export async function render(root, sessionId) {
         : '向写手描述剧情走向（不会作为台词出现）';
       input.placeholder = mode === 'say' ? '说点什么，推进剧情…' : '例如：突然下起大雨，让队伍躲进山洞…';
     });
-  });
-
-  // ---- 思考档位（localStorage 记忆 + 服务端持久化） ----
-  const thinkSel = $('#think-sel');
-  const THINK_KEY = 'reasoning_effort';
-  thinkSel.value = localStorage.getItem(THINK_KEY) || 'medium';
-  if (thinkSel.value !== thinkSel.selectedOptions[0].value) thinkSel.value = 'medium'; // 兜底脏数据
-  thinkSel.addEventListener('change', () => {
-    localStorage.setItem(THINK_KEY, thinkSel.value);
-    api.updateSettings({ reasoning_effort: thinkSel.value })
-      .then(() => toast('思考档位已切换：' + thinkSel.selectedOptions[0].textContent.replace('🧠 ', '')))
-      .catch((e) => toast(e.message, 'error'));
   });
 
   // ---- 灵感 ----
