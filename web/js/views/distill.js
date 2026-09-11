@@ -37,7 +37,7 @@ export async function render(root) {
     const wantStyle = $('#ds-style').checked;
 
     const btn = $('#ds-run');
-    btn.disabled = true; btn.textContent = '🧪 蒸馏中…（多对象并行，请稍候）';
+    btn.disabled = true; btn.textContent = '🧪 蒸馏中…（逐个进行，人多时较慢，请耐心等待）';
     resultsBox.innerHTML = '';
     try {
       const out = await api.distill(text, subject, targets);

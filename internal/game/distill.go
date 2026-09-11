@@ -75,33 +75,22 @@ func (e *Engine) Distill(ctx context.Context, text, subject string, targets []st
 		targets = targets[:5]
 	}
 	out := &DistillOutput{}
-	// 角色卡（并行）与写作风格同时进行，互不阻塞。
-	done := make(chan struct{}, len(targets)+1)
-	results := make([]DistillResult, len(targets))
-	for i, target := range targets {
-		go func(i int, target string) {
-			card, err := e.distillOne(ctx, text, target, subject, nil)
-			if err != nil {
-				results[i] = DistillResult{Target: target, Error: err.Error()}
-			} else {
-				results[i] = DistillResult{Target: target, Character: card}
-			}
-			done <- struct{}{}
-		}(i, target)
-	}
-	go func() {
-		st, err := e.distillStyle(ctx, text)
+	// 逐个串行蒸馏（本地小模型并发吃不满显存还互相拖慢），最后提炼风格。
+	results := make([]DistillResult, 0, len(targets))
+	for _, target := range targets {
+		card, err := e.distillOne(ctx, text, target, subject, nil)
 		if err != nil {
-			out.StyleError = err.Error()
-		} else {
-			out.Style = st
+			results = append(results, DistillResult{Target: target, Error: err.Error()})
+			continue
 		}
-		done <- struct{}{}
-	}()
-	for i := 0; i < len(targets)+1; i++ {
-		<-done
+		results = append(results, DistillResult{Target: target, Character: card})
 	}
 	out.Characters = results
+	if st, err := e.distillStyle(ctx, text); err != nil {
+		out.StyleError = err.Error()
+	} else {
+		out.Style = st
+	}
 	return out, nil
 }
 
@@ -428,7 +417,7 @@ func (e *Engine) Inspiration(ctx context.Context, sess *store.Session) ([]Inspir
 	sys := "你是互动式RPG的行动灵感助手。根据当前场景与最新剧情，为玩家生成 4~6 条下一步行动建议：\n" +
 		"- 约一半为 {\"kind\":\"say\",\"text\":\"…\"}：以【玩家角色】第一人称台词，符合其身份与当下处境，简短有力；\n" +
 		"- 其余为 {\"kind\":\"direct\",\"text\":\"…\"}：第三人称剧情走向指令，描述玩家希望发生的事件或转折；\n" +
-		"- 建议必须紧扣最新剧情，方向多样（试探、推进、调查、撤退、制造冲突……）；\n" +
+		"- 建议必须紧扣最新剧情，方向多样；\n" +
 		"只输出 JSON 数组，不要解释、不要代码块。"
 	out, err := e.llm.Complete(ctx, llm.Request{
 		Messages:    []llm.Message{{Role: llm.RoleSystem, Content: sys}, {Role: llm.RoleUser, Content: user.String()}},

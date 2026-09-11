@@ -80,7 +80,8 @@ func Load() (*Config, error) {
 			Model:       env("LLM_MODEL", ""),
 			Temperature: float32(envFloat("LLM_TEMPERATURE", 0.9)),
 			MaxTokens:   envInt("LLM_MAX_TOKENS", 0), // 0 = 不限制（请求中省略该字段）
-			Timeout:     time.Duration(envInt("LLM_TIMEOUT_SECONDS", 300)) * time.Second,
+			// 单次请求超时；本地小模型蒸馏/长生成较慢，默认放宽到 30 分钟。
+			Timeout: time.Duration(envInt("LLM_TIMEOUT_SECONDS", 1800)) * time.Second,
 		},
 		Image: ImageConfig{
 			BaseURL:     strings.TrimRight(env("IMG_BASE_URL", ""), "/"),
