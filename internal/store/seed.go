@@ -5,7 +5,7 @@ import (
 	"log"
 )
 
-// SeedDemoData 在数据库完全为空时播种示例角色与玩家档案，
+// SeedDemoData 在数据库完全为空时播种示例角色、玩家档案与写作风格，
 // 让演示模式开箱即玩；真实使用中用户可直接删除或修改。
 func SeedDemoData(s *Store) error {
 	cs, err := s.ListCharacters()
@@ -15,6 +15,14 @@ func SeedDemoData(s *Store) error {
 	ps, err := s.ListPersonas()
 	if err != nil {
 		return err
+	}
+	sts, err := s.ListStyles()
+	if err != nil {
+		return err
+	}
+	if len(sts) == 0 {
+		_ = s.CreateStyle(&WritingStyle{Name: "电影化奇幻",
+			Description: "第三人称限知视角；画面感优先，多用光影、声音与气味等感官细节；短句与长句交替，节奏张弛有度；对话简短有潜台词；情绪藏在动作与留白里，克制而不煽情。"})
 	}
 	if len(cs) > 0 || len(ps) > 0 {
 		return nil

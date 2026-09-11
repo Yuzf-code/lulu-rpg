@@ -14,6 +14,7 @@ type createSessionPayload struct {
 	Title        string   `json:"title"`
 	Scenario     string   `json:"scenario"`
 	PersonaID    string   `json:"persona_id"`
+	StyleID      string   `json:"style_id"` // 写作风格（可选）
 	CharacterIDs []string `json:"character_ids"`
 	AutoImage    bool     `json:"auto_image"`
 	ParentID     string   `json:"parent_id"` // 派生私聊时指向主线会话
@@ -55,8 +56,15 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		Title:     strings.TrimSpace(p.Title),
 		Scenario:  p.Scenario,
 		PersonaID: p.PersonaID,
+		StyleID:   strings.TrimSpace(p.StyleID),
 		ParentID:  p.ParentID,
 		AutoImage: p.AutoImage,
+	}
+	if sess.StyleID != "" {
+		if _, err := s.store.GetStyle(sess.StyleID); err != nil {
+			httpError(w, http.StatusBadRequest, "所选写作风格不存在，请刷新后重试")
+			return
+		}
 	}
 	// 派生私聊：继承主线设定；主线摘要存为 inherited_summary 快照
 	// （此后主线继续推进时，私聊会动态读取主线最新摘要）。
@@ -70,6 +78,9 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		}
 		if sess.PersonaID == "" {
 			sess.PersonaID = parent.PersonaID
+		}
+		if sess.StyleID == "" {
+			sess.StyleID = parent.StyleID // 私聊沿用主线的写作风格
 		}
 		sess.InheritedSummary = strings.TrimSpace(strings.Join(nonEmptyStrings(parent.Summary, parent.InheritedSummary), "\n\n"))
 		if sess.Title == "" {

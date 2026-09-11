@@ -56,6 +56,11 @@ export const api = {
   generateCardDraft: (kind, seed) => req('POST', '/api/characters/generate-draft', { kind, ...seed }),
   inspiration: (sessionId) => req('POST', `/api/sessions/${sessionId}/inspiration`, {}),
 
+  // 写作风格
+  listStyles: () => req('GET', '/api/styles'),
+  createStyle: (body) => req('POST', '/api/styles', body),
+  deleteStyle: (id) => req('DELETE', `/api/styles/${id}`),
+
   // SSE 流（opening / turn）
   streamSession: stream,
 };

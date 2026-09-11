@@ -52,6 +52,8 @@ func (m *Mock) compose(req Request) string {
 		return `[{"user":"你为什么留在这里？","char":"总得有人守着这盏灯。灭了，山里的人就找不到回来的路。"},{"user":"这些情报什么价？","char":"不收钱。讲一个我没听过的真事，就算两清。"},{"user":"前面那段路安全吗？","char":"白天安全。夜里……如果你不想知道夜里有什么，就别在夜里走。"}]`
 	case TaskDetect:
 		return `["无名旅人","雾中修士"]`
+	case TaskStyle:
+		return `{"name":"冷峻悬疑","description":"[旁白]以环境白描与感官细节（寒气、声响、气味）营造压迫感，短句为主、少形容词堆砌；台词简短藏机锋，避开寒暄；[动作]写克制的小动作（叩剑柄、收手指）而非大开大合；[内心]用短促的自我诘问；整体情绪藏在留白里，不直陈。"}`
 	case TaskDistill:
 		return m.distillCard(req.Mock.Target, req.Mock.Subject)
 	case TaskInspiration:

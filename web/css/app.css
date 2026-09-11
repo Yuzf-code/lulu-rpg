@@ -244,7 +244,7 @@ a { color: var(--accent-soft); }
 .editor { display: flex; flex-direction: column; gap: 14px; }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field > span { font-size: 13px; color: var(--text-dim); }
-input, textarea {
+input, textarea, select {
   background: var(--bg-soft);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
@@ -256,8 +256,9 @@ input, textarea {
   outline: none;
   transition: border-color .15s;
 }
-input:focus, textarea:focus { border-color: var(--accent); }
+input:focus, textarea:focus, select:focus { border-color: var(--accent); }
 textarea { resize: vertical; min-height: 40px; }
+select { appearance: auto; }
 
 .avatar-editor { display: flex; align-items: center; gap: 16px; }
 .avatar-preview .avatar, .avatar-preview .initial-avatar { border-radius: 18px; }

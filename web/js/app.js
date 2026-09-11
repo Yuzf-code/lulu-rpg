@@ -5,6 +5,7 @@ import * as lobby from './views/lobby.js';
 import * as characters from './views/characters.js';
 import * as personas from './views/personas.js';
 import * as chat from './views/chat.js';
+import * as distill from './views/distill.js';
 
 const app = document.getElementById('app');
 const nav = document.getElementById('nav');
@@ -14,6 +15,7 @@ export const state = {
 };
 
 const routes = [
+  { re: /^#\/distill$/, nav: 'characters', view: () => distill.render(app) },
   { re: /^#\/characters\/new$/, nav: 'characters', view: () => characters.renderEditor(app, null) },
   { re: /^#\/characters\/([\w-]+)$/, nav: 'characters', view: (m) => characters.renderEditor(app, m[1]) },
   { re: /^#\/characters$/, nav: 'characters', view: () => characters.renderList(app) },

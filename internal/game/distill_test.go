@@ -24,32 +24,36 @@ func TestExtractJSON(t *testing.T) {
 
 func TestDistillWithMock(t *testing.T) {
 	e := New(nil, &llm.Mock{}, nil, testCfg())
-	res, err := e.Distill(t.Context(), "这是一段小说文本，讲述艾莉娅与老巴德的故事。", "林远", []string{"艾莉娅", "老巴德"})
+	out, err := e.Distill(t.Context(), "这是一段小说文本，讲述艾莉娅与老巴德的故事。", "林远", []string{"艾莉娅", "老巴德"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res) != 2 {
-		t.Fatalf("应有两个结果: %d", len(res))
+	if len(out.Characters) != 2 {
+		t.Fatalf("应有两个结果: %d", len(out.Characters))
 	}
-	if res[0].Character == nil || res[0].Character.Name != "艾莉娅" {
-		t.Fatalf("第一张卡错误: %+v", res[0])
+	if out.Characters[0].Character == nil || out.Characters[0].Character.Name != "艾莉娅" {
+		t.Fatalf("第一张卡错误: %+v", out.Characters[0])
 	}
 	// 指定主体时应生成对主体的关系。
-	rels := res[0].Character.Relationships
+	rels := out.Characters[0].Character.Relationships
 	if len(rels) == 0 || rels[0].Subject != "林远" {
 		t.Fatalf("主体关系缺失: %+v", rels)
+	}
+	// 应同时产出分视角的写作风格草稿。
+	if out.Style == nil || out.Style.Name == "" || !strings.Contains(out.Style.Description, "[旁白]") {
+		t.Fatalf("风格草稿缺失或未分视角: %+v", out.Style)
 	}
 }
 
 func TestDistillAutoDetectTargets(t *testing.T) {
 	e := New(nil, &llm.Mock{}, nil, testCfg())
 	// Mock 的蒸馏任务在 Target 为空时返回默认名字「无名旅人」→ 能解析出人物。
-	res, err := e.Distill(t.Context(), "一些文本", "", nil)
+	out, err := e.Distill(t.Context(), "一些文本", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res) == 0 || res[0].Character == nil {
-		t.Fatalf("自动识别蒸馏失败: %+v", res)
+	if len(out.Characters) == 0 || out.Characters[0].Character == nil {
+		t.Fatalf("自动识别蒸馏失败: %+v", out)
 	}
 }
 

@@ -12,8 +12,9 @@
 | 模块 | 说明 |
 | --- | --- |
 | 角色卡 | 名称 / 头衔 / 性格 / 背景 / 外貌 / 标签 / 关系 / 开场白 / 对话示例；头像支持**上传**或 **AI 生成**（按名称+外貌） |
-| 文本蒸馏 | 粘贴小说/跑团记录等原文，**蒸馏出角色卡草稿**（可指定 1~5 个对象，留空自动识别）；可指定**主体**，蒸馏对象对主体的态度/关系；编辑已有卡时可选择**增强合并** |
+| 文本蒸馏 | 独立入口（🎭 角色卡页 → 🧪 文本蒸馏）：粘贴小说/跑团记录等原文，**并行蒸馏多张角色卡草稿**（可指定 1~5 个对象，留空自动识别）；可指定**主体**，蒸馏对象对主体的态度/关系；同时提炼**分视角的写作风格**（旁白/台词/动作/内心各自的笔触）；编辑已有卡时还可选择**增强合并** |
 | AI 草稿 | 开场白、对话示例可一键生成草稿，导入表单后自由修改 |
+| 写作风格 | 蒸馏提炼或手动创建；**开局新游戏时可选**，注入写手系统提示词，约束各视角行的笔触与氛围；派生私聊自动沿用主线风格 |
 | 行动灵感 | 输入框旁「✨ 灵感」按钮：按当前剧情生成 4~6 条建议（台词与导演指令混合），点选即填入输入框 |
 | 角色档案 | 玩家在故事中的身份；写手会配合档案演出，绝不代替你发言 |
 | 游戏实例 | 一个对话即一局游戏，相互隔离；可携带场景设定 |
@@ -100,7 +101,7 @@ GET    /api/health                       GET   /api/config
 GET|POST /api/characters                 GET|PUT|DELETE /api/characters/{id}
 POST   /api/characters/{id}/avatar       POST  /api/avatars/generate
 POST   /api/characters/distill           POST  /api/characters/{id}/distill
-POST   /api/characters/generate-draft
+POST   /api/characters/generate-draft   GET|POST /api/styles  PUT|DELETE /api/styles/{id}
 GET|POST /api/personas                   GET|PUT|DELETE /api/personas/{id}
 POST   /api/personas/{id}/default
 GET|POST /api/sessions                   GET|PATCH|DELETE /api/sessions/{id}

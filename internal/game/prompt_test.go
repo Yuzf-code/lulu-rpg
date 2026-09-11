@@ -29,7 +29,7 @@ func TestBuildChatMessagesShape(t *testing.T) {
 	}
 	userMsg := &store.Message{Turn: 3, Kind: store.KindUser, Style: store.StyleDirect, Content: "让天下雨"}
 
-	msgs := BuildChatMessages("东方王朝", persona, chars, "此前：一行人抵达客栈。", nil, history, userMsg, testCfg())
+	msgs := BuildChatMessages("东方王朝", persona, chars, "", "此前：一行人抵达客栈。", nil, history, userMsg, testCfg())
 
 	if msgs[0].Role != "system" || !strings.Contains(msgs[0].Content, "剧情写手") {
 		t.Fatalf("系统提示缺失或错误")
@@ -77,7 +77,7 @@ func TestBuildChatMessagesBudgetDropsOldest(t *testing.T) {
 		history = append(history, &store.Message{Turn: int64(i), Kind: store.KindUser,
 			Style: store.StyleSay, Content: strings.Repeat("这是一条比较长的历史消息，用来撑爆预算。", 3)})
 	}
-	msgs := BuildChatMessages("", nil, chars, "", nil, history, history[len(history)-1], cfg)
+	msgs := BuildChatMessages("", nil, chars, "", "", nil, history, history[len(history)-1], cfg)
 
 	// 历史必然被大幅裁剪：总消息数远小于 50，且最新一条内容必须保留。
 	if len(msgs) >= 12 {
@@ -96,7 +96,7 @@ func TestPrivateMemoryInjection(t *testing.T) {
 		Summary:      "艾莉娅与玩家私下约定了暗号「北风」，并透露了她对修士的怀疑。",
 		CharacterIDs: []string{"c_a"},
 	}}
-	msgs := BuildChatMessages("", &store.Persona{Name: "林远"}, chars, "", privates, nil, nil, testCfg())
+	msgs := BuildChatMessages("", &store.Persona{Name: "林远"}, chars, "", "", privates, nil, nil, testCfg())
 	sys := msgs[0].Content
 
 	idxA := strings.Index(sys, "1. 艾莉娅")
@@ -117,9 +117,27 @@ func TestPrivateMemoryInjection(t *testing.T) {
 	}
 
 	// 无私聊时不应出现该段落（规则第 6 条里的「私下经历」字样除外）。
-	msgs2 := BuildChatMessages("", nil, chars, "", nil, nil, nil, testCfg())
+	msgs2 := BuildChatMessages("", nil, chars, "", "", nil, nil, nil, testCfg())
 	if strings.Contains(msgs2[0].Content, "私下经历（仅该角色知晓") {
 		t.Fatal("无私聊时不应出现私下经历段落")
+	}
+}
+
+func TestStyleInPrompt(t *testing.T) {
+	chars := mkChars()
+	style := "[旁白]以环境白描营造压迫感；台词简短藏机锋。"
+	msgs := BuildChatMessages("", nil, chars, style, "", nil, nil, nil, testCfg())
+	sys := msgs[0].Content
+	if !strings.Contains(sys, "## 写作风格") || !strings.Contains(sys, "压迫感") {
+		t.Fatalf("风格未注入系统提示：%q", sys[:200])
+	}
+	if !strings.Contains(sys, "不得牺牲输出格式") {
+		t.Fatal("缺少格式优先约束")
+	}
+	// 无风格时不应出现该段落。
+	msgs2 := BuildChatMessages("", nil, chars, "", "", nil, nil, nil, testCfg())
+	if strings.Contains(msgs2[0].Content, "## 写作风格") {
+		t.Fatal("无风格时不应出现写作风格段落")
 	}
 }
 

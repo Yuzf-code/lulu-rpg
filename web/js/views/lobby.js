@@ -4,8 +4,8 @@ import { state } from '../app.js';
 import { esc, fmtTime, toast, avatarHTML, modal, onActions } from '../util.js';
 
 export async function render(root) {
-  const [sessions, personas, characters] = await Promise.all([
-    api.listSessions(), api.listPersonas(), api.listCharacters(),
+  const [sessions, personas, characters, styles] = await Promise.all([
+    api.listSessions(), api.listPersonas(), api.listCharacters(), api.listStyles(),
   ]);
 
   root.innerHTML = `
@@ -30,7 +30,7 @@ export async function render(root) {
     </div>`;
 
   onActions(root, {
-    'new-game': () => newGameModal(personas, characters),
+    'new-game': () => newGameModal(personas, characters, styles || []),
     'open-session': (t) => { location.hash = '#/chat/' + t.dataset.id; },
     'del-session': async (t, e) => {
       e.stopPropagation();
@@ -73,7 +73,7 @@ function sessionCard(s) {
 
 // ---- 开新游戏 ----
 
-function newGameModal(personas, characters) {
+function newGameModal(personas, characters, styles) {
   if (characters.length === 0) {
     toast('请先创建角色卡', 'error');
     location.hash = '#/characters';
@@ -82,7 +82,7 @@ function newGameModal(personas, characters) {
   const defaultPersona = personas.find((p) => p.is_default) || personas[0];
   const m = modal(`
     <h2>🎬 开始新游戏</h2>
-    <label class="field"><span>你的角色档案</span>
+    <div class="field"><span>你的角色档案</span>
       <div class="persona-pick">
         ${personas.length === 0 ? '<p class="sub">尚未创建档案，本局将以「旅行者」身份登场。可稍后在「档案」页创建。</p>'
           : personas.map((p) => `
@@ -92,29 +92,36 @@ function newGameModal(personas, characters) {
               <span>${esc(p.name)}</span>
             </label>`).join('')}
       </div>
-    </label>
-    <label class="field"><span>出场角色（可多选）</span>
+    </div>
+    <div class="field"><span>出场角色（可多选）</span>
       <div class="char-pick">
         ${characters.map((c) => `
           <button type="button" class="pick-chip" data-id="${esc(c.id)}">
             ${avatarHTML(c.avatar_path, c.name, 'sm')}<span>${esc(c.name)}</span>
           </button>`).join('')}
       </div>
-    </label>
-    <label class="field"><span>世界 / 场景设定（可选）</span>
+    </div>
+    ${styles.length ? `
+    <div class="field"><span>写作风格（可选，可先到 🧪 蒸馏页从文本提炼）</span>
+      <select name="style_id">
+        <option value="">不指定</option>
+        ${styles.map((st) => `<option value="${esc(st.id)}">${esc(st.name)}</option>`).join('')}
+      </select>
+    </div>` : ''}
+    <div class="field"><span>世界 / 场景设定（可选）</span>
       <textarea name="scenario" rows="3" placeholder="例如：架空的东方王朝，江湖门派林立；或直接留空由写手发挥"></textarea>
-    </label>
-    <label class="field"><span>会话标题（可选）</span>
+    </div>
+    <div class="field"><span>会话标题（可选）</span>
       <input name="title" placeholder="留空自动生成" />
-    </label>
+    </div>
     ${state.config.image.enabled ? `
     <label class="switch-row">
       <span>🎨 每轮自动生成配图</span>
       <input type="checkbox" name="auto_image" checked /><i class="switch"></i>
     </label>` : ''}
     <div class="modal-actions">
-      <button class="btn" data-close>取消</button>
-      <button class="btn primary" data-action="start">开始冒险</button>
+      <button type="button" class="btn" data-close>取消</button>
+      <button type="button" class="btn primary" data-action="start">开始冒险</button>
     </div>`);
 
   const selected = new Set();
@@ -125,15 +132,16 @@ function newGameModal(personas, characters) {
       selected.has(id) ? selected.delete(id) : selected.add(id);
       chip.classList.toggle('on', selected.has(id));
     }
-    if (e.target.matches('[data-close]')) m.close();
   });
 
   m.root.querySelector('[data-action="start"]').addEventListener('click', async () => {
     if (selected.size === 0) return toast('请至少选择一位角色', 'error');
     const persona = m.root.querySelector('input[name="persona"]:checked');
+    const styleSel = m.root.querySelector('[name="style_id"]');
     const body = {
       character_ids: [...selected],
       persona_id: persona ? persona.value : '',
+      style_id: styleSel ? styleSel.value : '',
       scenario: m.root.querySelector('[name="scenario"]').value.trim(),
       title: m.root.querySelector('[name="title"]').value.trim(),
       auto_image: !!m.root.querySelector('[name="auto_image"]')?.checked,

@@ -62,6 +62,7 @@ func BuildChatMessages(
 	scenario string,
 	persona *store.Persona,
 	chars []*store.Character,
+	styleText string,
 	summary string,
 	privates []PrivateMemory,
 	history []*store.Message,
@@ -69,7 +70,7 @@ func BuildChatMessages(
 	cfg *config.Config,
 ) []llm.Message {
 	msgs := make([]llm.Message, 0, 8)
-	msgs = append(msgs, llm.Message{Role: llm.RoleSystem, Content: buildSystemPrompt(scenario, persona, chars, privates, cfg)})
+	msgs = append(msgs, llm.Message{Role: llm.RoleSystem, Content: buildSystemPrompt(scenario, persona, chars, styleText, privates, cfg)})
 	if strings.TrimSpace(summary) != "" {
 		msgs = append(msgs, llm.Message{Role: llm.RoleSystem,
 			Content: "【此前剧情摘要】\n" + clip(summary, cfg.Context.MaxFieldChars*2)})
@@ -112,7 +113,7 @@ func personaName(p *store.Persona) string {
 }
 
 // buildSystemPrompt 生成整局游戏共享的系统提示词。
-func buildSystemPrompt(scenario string, persona *store.Persona, chars []*store.Character, privates []PrivateMemory, cfg *config.Config) string {
+func buildSystemPrompt(scenario string, persona *store.Persona, chars []*store.Character, styleText string, privates []PrivateMemory, cfg *config.Config) string {
 	var b strings.Builder
 	b.WriteString("你是一部互动式对话RPG的“剧情写手”。你负责讲述故事、扮演所有NPC和下面列出的角色，但绝不控制玩家角色。\n\n")
 
@@ -136,6 +137,11 @@ func buildSystemPrompt(scenario string, persona *store.Persona, chars []*store.C
 		b.WriteString("## 世界与场景设定\n" + clip(scenario, cfg.Context.MaxFieldChars*2) + "\n\n")
 	} else {
 		b.WriteString("## 世界与场景设定\n未指定，可根据角色设定选择一个合适的幻想/冒险舞台。\n\n")
+	}
+
+	if strings.TrimSpace(styleText) != "" {
+		b.WriteString("## 写作风格\n" + clip(styleText, cfg.Context.MaxFieldChars*2) + "\n")
+		b.WriteString("在各视角的行里贯彻以上风格：[旁白]按其环境与氛围笔触写，台词按其语感写，动作与内心按其笔触写；不得牺牲输出格式与剧情连贯。\n\n")
 	}
 
 	name := personaName(persona)

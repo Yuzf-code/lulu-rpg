@@ -34,13 +34,26 @@ type DistillResult struct {
 	Error     string         `json:"error,omitempty"`
 }
 
+// DistilledStyle 是从文本中提炼的写作风格草稿。
+type DistilledStyle struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+// DistillOutput 是一次完整蒸馏的产出：角色卡草稿 + 写作风格草稿。
+type DistillOutput struct {
+	Characters []DistillResult `json:"drafts"`
+	Style      *DistilledStyle `json:"style,omitempty"`
+	StyleError string          `json:"style_error,omitempty"`
+}
+
 // maxDistillText 限制蒸馏输入原文长度（rune），保护小上下文模型。
 const maxDistillText = 16000
 
-// Distill 从原文中蒸馏出一个或多个角色卡草稿。
+// Distill 从原文中蒸馏角色卡草稿与写作风格。
 // targets 为空时先让模型识别人物；subject 指定“主体”时，额外蒸馏
 // 各对象对主体的态度/关系。
-func (e *Engine) Distill(ctx context.Context, text, subject string, targets []string) ([]DistillResult, error) {
+func (e *Engine) Distill(ctx context.Context, text, subject string, targets []string) (*DistillOutput, error) {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return nil, fmt.Errorf("原文不能为空")
@@ -61,9 +74,10 @@ func (e *Engine) Distill(ctx context.Context, text, subject string, targets []st
 	if len(targets) > 5 {
 		targets = targets[:5]
 	}
-	// 各对象并行蒸馏，结果按输入顺序返回。
+	out := &DistillOutput{}
+	// 角色卡（并行）与写作风格同时进行，互不阻塞。
+	done := make(chan struct{}, len(targets)+1)
 	results := make([]DistillResult, len(targets))
-	done := make(chan struct{}, len(targets))
 	for i, target := range targets {
 		go func(i int, target string) {
 			card, err := e.distillOne(ctx, text, target, subject, nil)
@@ -75,10 +89,20 @@ func (e *Engine) Distill(ctx context.Context, text, subject string, targets []st
 			done <- struct{}{}
 		}(i, target)
 	}
-	for range targets {
+	go func() {
+		st, err := e.distillStyle(ctx, text)
+		if err != nil {
+			out.StyleError = err.Error()
+		} else {
+			out.Style = st
+		}
+		done <- struct{}{}
+	}()
+	for i := 0; i < len(targets)+1; i++ {
 		<-done
 	}
-	return results, nil
+	out.Characters = results
+	return out, nil
 }
 
 // DistillInto 蒸馏并融合进已有角色卡：模型在原卡设定基础上结合原文
@@ -156,6 +180,39 @@ func (e *Engine) distillOne(ctx context.Context, text, target, subject string, b
 		}
 	}
 	return &card, nil
+}
+
+// distillStyle 分析文本的写作风格，产出供剧情写手使用的风格指令。
+// 注意：写手是“逐行带视角标签”的输出格式（[旁白]/[角色·台词/动作/内心]），
+// 因此风格指令必须分视角描述各自的笔触，而不是泛泛的人称/排版建议。
+func (e *Engine) distillStyle(ctx context.Context, text string) (*DistilledStyle, error) {
+	sys := "你要为一部互动式对话RPG的「剧情写手」提炼写作风格。" +
+		"该写手逐行输出，每行带视角标签：[旁白]（环境与场面描写）、[角色名]（台词）、[角色名·动作]（外部动作与神态）、[角色名·内心]（心理独白）。" +
+		"请分析给定文本的写作风格，输出严格 JSON 对象：" +
+		"`{\"name\":\"简短风格名\",\"description\":\"写给该写手的风格指令\"}`。" +
+		"description（150字内）分视角说明：[旁白]如何写环境与氛围（意象、感官细节、句式节奏）；" +
+		"台词什么语感（长短、潜台词、口吻差异）；动作与内心独白用什么笔触（克制还是浓烈、具体还是留白）；" +
+		"以及整体基调。不要指定人称与排版格式（由系统固定），不要复述剧情内容。只输出 JSON，不要代码块、不要解释。"
+	out, err := e.llm.Complete(ctx, llm.Request{
+		Messages: []llm.Message{
+			{Role: llm.RoleSystem, Content: sys},
+			{Role: llm.RoleUser, Content: clip(text, maxDistillText)},
+		},
+		Temperature: 0.4,
+		MaxTokens:   300,
+		Mock:        llm.MockHint{Task: llm.TaskStyle},
+	})
+	if err != nil {
+		return nil, err
+	}
+	var st DistilledStyle
+	if err := extractJSON(out, &st); err != nil {
+		return nil, fmt.Errorf("风格解析失败: %w", err)
+	}
+	if strings.TrimSpace(st.Name) == "" {
+		return nil, fmt.Errorf("未生成有效的风格名")
+	}
+	return &st, nil
 }
 
 // mergeCard 把蒸馏结果融合进已有卡（非空字段覆盖、列表合并去重）。

@@ -25,12 +25,12 @@ func (s *Server) distillCharacters(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusBadRequest, "请提供要蒸馏的原文")
 		return
 	}
-	drafts, err := s.engine.Distill(r.Context(), p.Text, p.Subject, p.Targets)
+	out, err := s.engine.Distill(r.Context(), p.Text, p.Subject, p.Targets)
 	if err != nil {
 		httpError(w, userOrUpstream(err), err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"drafts": drafts})
+	writeJSON(w, http.StatusOK, out)
 }
 
 // distillIntoCharacter 蒸馏并增强已有角色卡，返回融合后的草稿。

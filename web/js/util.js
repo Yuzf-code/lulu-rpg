@@ -105,18 +105,26 @@ export function onActions(container, handlers) {
   });
 }
 
-// 简易模态框。返回 {root, close}。
+// 简易模态框。返回 {root, wrap, close}。
+// 内置两类关闭行为：点击遮罩、点击任意 [data-close] 元素（用 closest
+// 匹配，保证点中按钮内部任何子元素都生效）。
 export function modal(html, cls = '') {
   const wrap = document.createElement('div');
   wrap.className = `modal-wrap ${cls}`;
   wrap.innerHTML = `<div class="modal">${html}</div>`;
   document.body.appendChild(wrap);
   requestAnimationFrame(() => wrap.classList.add('open'));
+  let closed = false;
   const close = () => {
+    if (closed) return;
+    closed = true;
     wrap.classList.remove('open');
     setTimeout(() => wrap.remove(), 220);
   };
-  wrap.addEventListener('click', (e) => { if (e.target === wrap) close(); });
+  wrap.addEventListener('click', (e) => {
+    if (e.target === wrap) return close();
+    if (e.target.closest('[data-close]')) close();
+  });
   return { root: wrap.querySelector('.modal'), wrap, close };
 }
 

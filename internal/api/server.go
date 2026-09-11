@@ -59,6 +59,12 @@ func (s *Server) routes() {
 	m.HandleFunc("DELETE /api/personas/{id}", s.deletePersona)
 	m.HandleFunc("POST /api/personas/{id}/default", s.setDefaultPersona)
 
+	// 写作风格
+	m.HandleFunc("GET /api/styles", s.listStyles)
+	m.HandleFunc("POST /api/styles", s.createStyle)
+	m.HandleFunc("PUT /api/styles/{id}", s.updateStyle)
+	m.HandleFunc("DELETE /api/styles/{id}", s.deleteStyle)
+
 	// 会话（游戏实例）
 	m.HandleFunc("GET /api/sessions", s.listSessions)
 	m.HandleFunc("POST /api/sessions", s.createSession)

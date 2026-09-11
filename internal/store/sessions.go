@@ -16,6 +16,7 @@ type Session struct {
 	Scenario          string `json:"scenario"`
 	PersonaID         string `json:"persona_id"`
 	ParentID          string `json:"parent_id"`
+	StyleID           string `json:"style_id"`
 	AutoImage         bool   `json:"auto_image"`
 	TurnSeq           int64  `json:"turn_seq"`
 	Summary           string `json:"summary"`
@@ -25,8 +26,9 @@ type Session struct {
 	UpdatedAt         int64  `json:"updated_at"`
 
 	// 关联数据（查询时填充）
-	Persona    *Persona     `json:"persona,omitempty"`
-	Characters []*Character `json:"characters"`
+	Persona    *Persona      `json:"persona,omitempty"`
+	Style      *WritingStyle `json:"style,omitempty"`
+	Characters []*Character  `json:"characters"`
 }
 
 // SessionSummary 是会话列表里的轻量视图。
@@ -37,19 +39,20 @@ type SessionSummary struct {
 	ImageCount   int64  `json:"image_count"`
 }
 
-const sessionCols = `id, title, scenario, persona_id, parent_id, auto_image, turn_seq, summary, inherited_summary, summarized_upto_seq, created_at, updated_at`
+const sessionCols = `id, title, scenario, persona_id, parent_id, style_id, auto_image, turn_seq, summary, inherited_summary, summarized_upto_seq, created_at, updated_at`
 
 func scanSession(r rowScanner) (*Session, error) {
 	var s Session
-	var personaID, parentID sql.NullString
+	var personaID, parentID, styleID sql.NullString
 	var autoImage int
-	err := r.Scan(&s.ID, &s.Title, &s.Scenario, &personaID, &parentID, &autoImage,
+	err := r.Scan(&s.ID, &s.Title, &s.Scenario, &personaID, &parentID, &styleID, &autoImage,
 		&s.TurnSeq, &s.Summary, &s.InheritedSummary, &s.SummarizedUptoSeq, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
 	s.PersonaID = nullStr(personaID)
 	s.ParentID = nullStr(parentID)
+	s.StyleID = nullStr(styleID)
 	s.AutoImage = autoImage != 0
 	return &s, nil
 }
@@ -60,9 +63,9 @@ func (s *Store) CreateSession(sess *Session, characterIDs []string) error {
 	sess.CreatedAt = now()
 	sess.UpdatedAt = sess.CreatedAt
 	return s.tx(func(tx *sql.Tx) error {
-		_, err := tx.Exec(`INSERT INTO sessions (id, title, scenario, persona_id, parent_id, auto_image, turn_seq, summary, inherited_summary, summarized_upto_seq, created_at, updated_at)
-			VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-			sess.ID, sess.Title, sess.Scenario, nullIfEmpty(sess.PersonaID), nullIfEmpty(sess.ParentID),
+		_, err := tx.Exec(`INSERT INTO sessions (id, title, scenario, persona_id, parent_id, style_id, auto_image, turn_seq, summary, inherited_summary, summarized_upto_seq, created_at, updated_at)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			sess.ID, sess.Title, sess.Scenario, nullIfEmpty(sess.PersonaID), nullIfEmpty(sess.ParentID), nullIfEmpty(sess.StyleID),
 			boolInt(sess.AutoImage), 0, sess.Summary, sess.InheritedSummary, sess.SummarizedUptoSeq, sess.CreatedAt, sess.UpdatedAt)
 		if err != nil {
 			return err
@@ -144,6 +147,14 @@ func (s *Store) fillSessionRefs(sess *Session) error {
 			return err
 		}
 	}
+	if sess.StyleID != "" {
+		st, err := s.GetStyle(sess.StyleID)
+		if err == nil {
+			sess.Style = st
+		} else if !errors.Is(err, ErrNotFound) {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -160,10 +171,10 @@ func (s *Store) ListSessions() ([]*SessionSummary, error) {
 	var out []*SessionSummary
 	for rows.Next() {
 		var item SessionSummary
-		var personaID, parentID sql.NullString
+		var personaID, parentID, styleID sql.NullString
 		var autoImage int
 		var preview sql.NullString
-		err := rows.Scan(&item.ID, &item.Title, &item.Scenario, &personaID, &parentID, &autoImage,
+		err := rows.Scan(&item.ID, &item.Title, &item.Scenario, &personaID, &parentID, &styleID, &autoImage,
 			&item.TurnSeq, &item.Summary, &item.InheritedSummary, &item.SummarizedUptoSeq, &item.CreatedAt, &item.UpdatedAt,
 			&preview, &item.MessageCount, &item.ImageCount)
 		if err != nil {
@@ -171,6 +182,7 @@ func (s *Store) ListSessions() ([]*SessionSummary, error) {
 		}
 		item.PersonaID = nullStr(personaID)
 		item.ParentID = nullStr(parentID)
+		item.StyleID = nullStr(styleID)
 		item.AutoImage = autoImage != 0
 		item.Preview = nullStr(preview)
 		out = append(out, &item)

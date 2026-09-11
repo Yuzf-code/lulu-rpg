@@ -162,9 +162,13 @@ func (e *Engine) generate(ctx context.Context, sess *store.Session, turn int64, 
 	if err != nil {
 		return err
 	}
+	styleText := ""
+	if sess.Style != nil {
+		styleText = sess.Style.Description
+	}
 	parser := NewParser(chars)
 	req := llm.Request{
-		Messages:    BuildChatMessages(sess.Scenario, persona, chars, effSummary, privates, history, userMsg, e.cfg),
+		Messages:    BuildChatMessages(sess.Scenario, persona, chars, styleText, effSummary, privates, history, userMsg, e.cfg),
 		Temperature: e.cfg.LLM.Temperature,
 		MaxTokens:   e.cfg.LLM.MaxTokens,
 		Mock: llm.MockHint{

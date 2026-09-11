@@ -25,6 +25,7 @@ const (
 	TaskDialogues   = "dialogues"   // 对话示例草稿
 	TaskDetect      = "detect"      // 蒸馏前的人物识别
 	TaskDistill     = "distill"     // 文本蒸馏角色卡
+	TaskStyle       = "style"       // 文本蒸馏写作风格
 	TaskInspiration = "inspiration" // 行动灵感建议
 )
 

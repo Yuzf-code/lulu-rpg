@@ -8,6 +8,7 @@ export async function renderList(root) {
     <div class="page">
       <header class="page-head">
         <div><h1>🎭 角色卡</h1><p class="sub">他们将在你的故事里登场</p></div>
+        <a class="btn" href="#/distill">🧪 文本蒸馏</a>
         <a class="btn primary" href="#/characters/new">＋ 创建</a>
       </header>
       <div class="char-grid">

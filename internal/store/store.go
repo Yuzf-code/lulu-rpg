@@ -45,7 +45,10 @@ func (s *Store) migrate() error {
 	if err := s.ensureColumn("characters", "relationships", "TEXT NOT NULL DEFAULT '[]'"); err != nil {
 		return err
 	}
-	return s.ensureColumn("sessions", "inherited_summary", "TEXT NOT NULL DEFAULT ''")
+	if err := s.ensureColumn("sessions", "inherited_summary", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	return s.ensureColumn("sessions", "style_id", "TEXT REFERENCES styles(id) ON DELETE SET NULL")
 }
 
 // ensureColumn 在表缺少指定列时以 ALTER TABLE 补上。
@@ -146,6 +149,14 @@ id TEXT PRIMARY KEY NOT NULL,
 	created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_images_session ON images(session_id, turn);
+
+CREATE TABLE IF NOT EXISTS styles (
+	id          TEXT PRIMARY KEY NOT NULL,
+	name        TEXT NOT NULL,
+	description TEXT NOT NULL DEFAULT '',
+	created_at  INTEGER NOT NULL,
+	updated_at  INTEGER NOT NULL
+);
 `
 
 // ---- 通用小工具 ----
