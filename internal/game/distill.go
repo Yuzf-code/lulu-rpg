@@ -125,7 +125,7 @@ func (e *Engine) distillOne(ctx context.Context, text, target, subject string, b
 	out, err := e.llm.Complete(ctx, llm.Request{
 		Messages:    []llm.Message{{Role: llm.RoleSystem, Content: sys}, {Role: llm.RoleUser, Content: user.String()}},
 		Temperature: 0.5,
-		MaxTokens:   4096,
+		MaxTokens:   e.cfg.LLM.MaxTokens,
 		Mock:        llm.MockHint{Task: llm.TaskDistill, Target: target, Subject: subject},
 	})
 	if err != nil {
@@ -176,7 +176,7 @@ func (e *Engine) distillStyle(ctx context.Context, text string) (*DistilledStyle
 			{Role: llm.RoleUser, Content: clip(text, maxDistillText)},
 		},
 		Temperature: 0.4,
-		MaxTokens:   2048,
+		MaxTokens:   e.cfg.LLM.MaxTokens,
 		Mock:        llm.MockHint{Task: llm.TaskStyle},
 	})
 	if err != nil {
@@ -268,7 +268,7 @@ func (e *Engine) detectTargets(ctx context.Context, text string) ([]string, erro
 			{Role: llm.RoleUser, Content: clip(text, maxDistillText)},
 		},
 		Temperature: 0.2,
-		MaxTokens:   1024,
+		MaxTokens:   e.cfg.LLM.MaxTokens,
 		Mock:        llm.MockHint{Task: llm.TaskDetect},
 	})
 	if err != nil {
@@ -315,7 +315,7 @@ func (e *Engine) DraftGreeting(ctx context.Context, seed CardSeed) (string, erro
 	out, err := e.llm.Complete(ctx, llm.Request{
 		Messages:    []llm.Message{{Role: llm.RoleSystem, Content: sys}, {Role: llm.RoleUser, Content: cardSeedPrompt(seed)}},
 		Temperature: 0.8,
-		MaxTokens:   1024,
+		MaxTokens:   e.cfg.LLM.MaxTokens,
 		Mock:        llm.MockHint{Task: llm.TaskGreeting, Target: seed.Name},
 	})
 	if err != nil {
@@ -338,7 +338,7 @@ func (e *Engine) DraftDialogues(ctx context.Context, seed CardSeed) ([]store.Exa
 	out, err := e.llm.Complete(ctx, llm.Request{
 		Messages:    []llm.Message{{Role: llm.RoleSystem, Content: sys}, {Role: llm.RoleUser, Content: cardSeedPrompt(seed)}},
 		Temperature: 0.8,
-		MaxTokens:   2048,
+		MaxTokens:   e.cfg.LLM.MaxTokens,
 		Mock:        llm.MockHint{Task: llm.TaskDialogues, Target: seed.Name},
 	})
 	if err != nil {
@@ -429,7 +429,7 @@ func (e *Engine) Inspiration(ctx context.Context, sess *store.Session) ([]Inspir
 	out, err := e.llm.Complete(ctx, llm.Request{
 		Messages:    []llm.Message{{Role: llm.RoleSystem, Content: sys}, {Role: llm.RoleUser, Content: user.String()}},
 		Temperature: 0.9,
-		MaxTokens:   1536,
+		MaxTokens:   e.cfg.LLM.MaxTokens,
 		Mock:        llm.MockHint{Task: llm.TaskInspiration, PersonaName: personaName(persona), CharNames: charNames(sess.Characters)},
 	})
 	if err != nil {
@@ -509,7 +509,7 @@ func extractJSON(s string, target any) error {
 func requireContent(out, task string) (string, error) {
 	out = strings.TrimSpace(out)
 	if out == "" {
-		return "", fmt.Errorf("模型未返回任何内容（思考型模型可能耗尽了本次输出预算），请重试一次")
+		return "", fmt.Errorf("模型未返回任何内容，请重试一次")
 	}
 	return out, nil
 }
