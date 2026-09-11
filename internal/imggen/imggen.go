@@ -11,6 +11,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"lulu-rpg/internal/llm"
 )
 
 // Provider 生成一张图片并返回其编码数据（当前为 PNG）。
@@ -25,6 +27,7 @@ type OpenAICompat struct {
 	Model   string
 	Size    string
 	Timeout time.Duration
+	Proxy   string // 为空时直连
 	Client  *http.Client
 }
 
@@ -36,7 +39,19 @@ func NewOpenAICompat(baseURL, apiKey, model, size string, timeout time.Duration)
 		Model:   model,
 		Size:    size,
 		Timeout: timeout,
-		Client:  &http.Client{},
+		Client:  &http.Client{Transport: llm.TransportWithProxy("")},
+	}
+}
+
+// NewOpenAICompatWithProxy 创建带出站代理的客户端。
+func NewOpenAICompatWithProxy(baseURL, apiKey, model, size string, timeout time.Duration, proxy string) *OpenAICompat {
+	return &OpenAICompat{
+		BaseURL: baseURL,
+		APIKey:  apiKey,
+		Model:   model,
+		Size:    size,
+		Timeout: timeout,
+		Client:  &http.Client{Transport: llm.TransportWithProxy(proxy)},
 	}
 }
 

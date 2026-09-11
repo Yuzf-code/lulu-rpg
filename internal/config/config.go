@@ -2,6 +2,7 @@
 package config
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"strconv"
@@ -21,9 +22,10 @@ const (
 
 // Config 汇总所有可调参数，均来自环境变量。
 type Config struct {
-	Addr    string // HTTP 监听地址
-	DataDir string // SQLite 与图片等持久化目录
-	WebDir  string // 前端静态文件目录
+	Addr      string // HTTP 监听地址
+	DataDir   string // SQLite 与图片等持久化目录
+	WebDir    string // 前端静态文件目录
+	HTTPProxy string // 访问 LLM/图像服务使用的代理；空 = 直连（忽略环境的 http_proxy）
 
 	LLM       LLMConfig
 	Image     ImageConfig
@@ -38,7 +40,7 @@ type LLMConfig struct {
 	APIKey      string
 	Model       string
 	Temperature float32
-	MaxTokens   int
+	MaxTokens   int // 0 = 不限制（请求中不携带 max_tokens，由模型自然停止）
 	Timeout     time.Duration
 }
 
@@ -61,11 +63,15 @@ type ContextConfig struct {
 }
 
 // Load 从环境变量读取配置，未设置时使用内置默认值（演示模式）。
+// 工作目录下存在 .env 文件时会自动加载（不覆盖已设置的环境变量）。
 func Load() (*Config, error) {
+	loadDotEnv()
+
 	c := &Config{
-		Addr:    env("HTTP_ADDR", ":8080"),
-		DataDir: env("APP_DATA_DIR", "./data"),
-		WebDir:  env("APP_WEB_DIR", "./web"),
+		Addr:      listenAddr(),
+		DataDir:   env("APP_DATA_DIR", "./data"),
+		WebDir:    env("APP_WEB_DIR", "./web"),
+		HTTPProxy: env("APP_HTTP_PROXY", ""),
 
 		LLM: LLMConfig{
 			Provider:    Provider(strings.ToLower(env("LLM_PROVIDER", string(ProviderMock)))),
@@ -73,7 +79,7 @@ func Load() (*Config, error) {
 			APIKey:      env("LLM_API_KEY", ""),
 			Model:       env("LLM_MODEL", ""),
 			Temperature: float32(envFloat("LLM_TEMPERATURE", 0.9)),
-			MaxTokens:   envInt("LLM_MAX_TOKENS", 1024),
+			MaxTokens:   envInt("LLM_MAX_TOKENS", 0), // 0 = 不限制（请求中省略该字段）
 			Timeout:     time.Duration(envInt("LLM_TIMEOUT_SECONDS", 300)) * time.Second,
 		},
 		Image: ImageConfig{
@@ -110,6 +116,47 @@ func Load() (*Config, error) {
 
 // ImageEnabled 表示回合配图功能是否可用。
 func (c *Config) ImageEnabled() bool { return c.Image.Model != "" }
+
+// listenAddr 决定监听地址：HTTP_ADDR 优先；否则用 APP_PORT；默认 :8080。
+// 形如 ":8081" 会绑定所有网卡，局域网内设备可直接访问。
+func listenAddr() string {
+	if a := env("HTTP_ADDR", ""); a != "" {
+		return a
+	}
+	if p := env("APP_PORT", ""); p != "" {
+		return ":" + p
+	}
+	return ":8080"
+}
+
+// loadDotEnv 加载工作目录下的 .env（KEY=VALUE，支持 # 注释），
+// 已存在的环境变量优先，不被覆盖。
+func loadDotEnv() {
+	f, err := os.Open(".env")
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		k, v, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		k = strings.TrimSpace(k)
+		v = strings.Trim(strings.TrimSpace(v), `"'`)
+		if k == "" {
+			continue
+		}
+		if _, exists := os.LookupEnv(k); !exists {
+			_ = os.Setenv(k, v)
+		}
+	}
+}
 
 func env(key, def string) string {
 	if v := strings.TrimSpace(os.Getenv(key)); v != "" {

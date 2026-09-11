@@ -18,18 +18,26 @@ type OpenAICompat struct {
 	APIKey  string
 	Model   string
 	Timeout time.Duration
+	Proxy   string // 为空时直连（忽略环境的 http_proxy，避免局域网请求被代理劫持）
 	Client  *http.Client
 }
 
 // NewOpenAICompat 创建客户端。
 func NewOpenAICompat(baseURL, apiKey, model string, timeout time.Duration) *OpenAICompat {
-	return &OpenAICompat{
+	return newOpenAICompat(baseURL, apiKey, model, timeout, "")
+}
+
+// newOpenAICompat 内部构造，允许指定出站代理。
+func newOpenAICompat(baseURL, apiKey, model string, timeout time.Duration, proxy string) *OpenAICompat {
+	c := &OpenAICompat{
 		BaseURL: baseURL,
 		APIKey:  apiKey,
 		Model:   model,
 		Timeout: timeout,
-		Client:  &http.Client{}, // 超时由 ctx 控制，便于流式长连接
+		Proxy:   proxy,
+		Client:  &http.Client{Transport: TransportWithProxy(proxy)}, // 超时由 ctx 控制，便于流式长连接
 	}
+	return c
 }
 
 type chatRequest struct {

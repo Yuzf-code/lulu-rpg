@@ -368,7 +368,7 @@ export async function render(root, sessionId) {
   });
 
   // ---- 开场 ----
-  if (messages.length === 0 && session.turn_seq === 0) {
+  if (messages.length === 0) {
     if ((session.characters || []).length === 0) {
       appendErrorChip('这个会话没有出场角色，无法开始。请删除后重新创建。');
     } else {

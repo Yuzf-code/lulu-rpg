@@ -46,9 +46,22 @@ docker compose exec ollama ollama pull qwen3:8b
 ### 方式二：本地开发
 
 ```bash
-go run ./cmd/server       # 演示模式，http://localhost:8080
+go run ./cmd/server       # 自动加载 .env；无 .env 时为演示模式
 go test ./...             # 全量测试
 ```
+
+### 手机局域网访问 📱
+
+服务默认绑定所有网卡，手机连同一 Wi-Fi 即可游玩：
+
+1. `.env` 中设置 `APP_PORT=8081`
+2. 查询电脑局域网 IP：macOS `ipconfig getifaddr en0` / Linux `ip addr`
+3. 手机浏览器访问 `http://<电脑IP>:8081`
+
+提示：
+- macOS 首次启动如弹出防火墙询问，选择「允许」；
+- LLM/图像请求默认**直连**（不读系统的 http_proxy，避免局域网服务被本机代理劫持）；如需经代理访问外部 API，设置 `APP_HTTP_PROXY=http://127.0.0.1:7897`；
+- Ollama 默认上下文较小（约 4k），若调大了 `CONTEXT_MAX_TOKENS`，请在 Ollama 侧同步设置 `OLLAMA_CONTEXT_LENGTH`（或建模型时指定 `num_ctx`），否则长提示词会被截头。
 
 ## 接入大模型 / 图像服务
 

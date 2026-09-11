@@ -65,7 +65,9 @@ func (s *Server) postOpening(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	emit := sse.send
-	if sess.TurnSeq > 0 {
+	// 幂等守卫：已有剧情消息就不再生成。用「消息数」而非回合号判断——
+	// 否则首次开场失败（消耗了回合号）的会话将永远无法重新开场。
+	if existing, err := s.store.ListMessages(sess.ID, 0, 1); err == nil && len(existing) > 0 {
 		_ = emit(game.Event{Type: "done", Turn: sess.TurnSeq})
 		return
 	}

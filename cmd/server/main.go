@@ -47,6 +47,9 @@ func main() {
 		lp = llm.NewOpenAICompat(cfg.LLM.BaseURL, cfg.LLM.APIKey, cfg.LLM.Model, cfg.LLM.Timeout)
 		logger.Printf("剧情写手：%s @ %s", cfg.LLM.Model, cfg.LLM.BaseURL)
 	}
+	if cfg.HTTPProxy != "" {
+		logger.Printf("出站代理（LLM/图像）：%s", cfg.HTTPProxy)
+	}
 
 	// 图像 Provider：IMG_MODEL=mock 强制演示画师；留空关闭配图；其余走 OpenAI 兼容。
 	var ip imggen.Provider
@@ -55,7 +58,7 @@ func main() {
 			ip = imggen.NewMock()
 			logger.Printf("回合配图：内置演示画师（Mock）")
 		} else {
-			ip = imggen.NewOpenAICompat(cfg.Image.BaseURL, cfg.Image.APIKey, cfg.Image.Model, cfg.Image.Size, cfg.Image.Timeout)
+			ip = imggen.NewOpenAICompatWithProxy(cfg.Image.BaseURL, cfg.Image.APIKey, cfg.Image.Model, cfg.Image.Size, cfg.Image.Timeout, cfg.HTTPProxy)
 			logger.Printf("回合配图：%s @ %s", cfg.Image.Model, cfg.Image.BaseURL)
 		}
 	} else {
