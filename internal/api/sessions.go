@@ -58,7 +58,8 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		ParentID:  p.ParentID,
 		AutoImage: p.AutoImage,
 	}
-	// 派生私聊：继承主线设定与记忆。
+	// 派生私聊：继承主线设定；主线摘要存为 inherited_summary 快照
+	// （此后主线继续推进时，私聊会动态读取主线最新摘要）。
 	if sess.ParentID != "" {
 		parent, err := s.store.GetSession(sess.ParentID)
 		if notFoundOr(w, err, "load parent session") {
@@ -70,6 +71,7 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		if sess.PersonaID == "" {
 			sess.PersonaID = parent.PersonaID
 		}
+		sess.InheritedSummary = strings.TrimSpace(strings.Join(nonEmptyStrings(parent.Summary, parent.InheritedSummary), "\n\n"))
 		if sess.Title == "" {
 			sess.Title = "私聊 · " + joinNames(chars, 3)
 		}
@@ -80,12 +82,6 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.CreateSession(sess, ids); err != nil {
 		httpError(w, http.StatusInternalServerError, "创建会话失败")
 		return
-	}
-	if sess.ParentID != "" {
-		if err := s.store.CopyStoryMemory(sess.ParentID, sess.ID); err != nil {
-			httpError(w, http.StatusInternalServerError, "继承主线记忆失败")
-			return
-		}
 	}
 	full, err := s.store.GetSession(sess.ID)
 	if notFoundOr(w, err, "load session") {
@@ -99,7 +95,23 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 	if notFoundOr(w, err, "get session") {
 		return
 	}
-	writeJSON(w, http.StatusOK, sess)
+	// 附带派生私聊列表（前端展示「N 段私聊记忆」提示）。
+	children, _ := s.store.ListChildren(sess.ID)
+	chats := make([]map[string]any, 0, len(children))
+	for _, c := range children {
+		names := make([]string, 0, len(c.Characters))
+		for _, ch := range c.Characters {
+			names = append(names, ch.Name)
+		}
+		chats = append(chats, map[string]any{
+			"id": c.ID, "title": c.Title, "characters": names,
+			"has_memory": strings.TrimSpace(c.Summary) != "",
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"session":       sess,
+		"private_chats": chats,
+	})
 }
 
 func (s *Server) updateSession(w http.ResponseWriter, r *http.Request) {
@@ -162,6 +174,16 @@ func (s *Server) listMessages(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---- 小工具 ----
+
+func nonEmptyStrings(ss ...string) []string {
+	out := make([]string, 0, len(ss))
+	for _, s := range ss {
+		if strings.TrimSpace(s) != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
 
 func dedupeIDs(in []string) []string {
 	seen := make(map[string]bool, len(in))

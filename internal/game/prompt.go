@@ -48,6 +48,14 @@ const OpeningDirective = "【系统指令】这是故事的开场。请写出开
 	"- 在结尾为玩家留出介入空间；\n" +
 	"- 严格遵守输出格式（行首标签），不要替玩家角色说话或行动。"
 
+// PrivateMemory 是一段派生私聊的「私下剧情摘要」，按参与角色回流到
+// 主线提示词：只有参与该私聊的角色知情，其他角色不应表现出知情。
+type PrivateMemory struct {
+	Title        string
+	Summary      string
+	CharacterIDs []string
+}
+
 // BuildChatMessages 组装一次生成的完整消息序列。
 // history 不包含本轮刚写入的玩家输入（由 userMsg 单独给出）。
 func BuildChatMessages(
@@ -55,12 +63,13 @@ func BuildChatMessages(
 	persona *store.Persona,
 	chars []*store.Character,
 	summary string,
+	privates []PrivateMemory,
 	history []*store.Message,
 	userMsg *store.Message,
 	cfg *config.Config,
 ) []llm.Message {
 	msgs := make([]llm.Message, 0, 8)
-	msgs = append(msgs, llm.Message{Role: llm.RoleSystem, Content: buildSystemPrompt(scenario, persona, chars, cfg)})
+	msgs = append(msgs, llm.Message{Role: llm.RoleSystem, Content: buildSystemPrompt(scenario, persona, chars, privates, cfg)})
 	if strings.TrimSpace(summary) != "" {
 		msgs = append(msgs, llm.Message{Role: llm.RoleSystem,
 			Content: "【此前剧情摘要】\n" + clip(summary, cfg.Context.MaxFieldChars*2)})
@@ -103,7 +112,7 @@ func personaName(p *store.Persona) string {
 }
 
 // buildSystemPrompt 生成整局游戏共享的系统提示词。
-func buildSystemPrompt(scenario string, persona *store.Persona, chars []*store.Character, cfg *config.Config) string {
+func buildSystemPrompt(scenario string, persona *store.Persona, chars []*store.Character, privates []PrivateMemory, cfg *config.Config) string {
 	var b strings.Builder
 	b.WriteString("你是一部互动式对话RPG的“剧情写手”。你负责讲述故事、扮演所有NPC和下面列出的角色，但绝不控制玩家角色。\n\n")
 
@@ -120,7 +129,8 @@ func buildSystemPrompt(scenario string, persona *store.Persona, chars []*store.C
 	b.WriteString("2. 描述谁在说话/行动/思考，就用谁的名字做标签；与角色无关的内容一律用[旁白]；\n")
 	b.WriteString("3. 只能给“出场角色”与无关路人NPC安排台词，绝不出现在玩家角色名下的台词、动作或心理；\n")
 	b.WriteString("4. 保持每个角色的人设、语气与称谓一致；剧情要接续上文与既定事实；\n")
-	b.WriteString("5. 每轮通常3~8行，推进适度，结尾常以某个角色的台词或动作收束，给玩家留出反应空间。\n\n")
+	b.WriteString("5. 每轮通常3~8行，推进适度，结尾常以某个角色的台词或动作收束，给玩家留出反应空间；\n")
+	b.WriteString("6. 角色只知道自己亲历的事：角色卡中标注的「私下经历」仅该角色知晓，其他角色不应表现出知情，除非剧情中已被公开。\n\n")
 
 	if strings.TrimSpace(scenario) != "" {
 		b.WriteString("## 世界与场景设定\n" + clip(scenario, cfg.Context.MaxFieldChars*2) + "\n\n")
@@ -150,6 +160,9 @@ func buildSystemPrompt(scenario string, persona *store.Persona, chars []*store.C
 		}
 		if rels := relevantRelationships(c, persona, chars); rels != "" {
 			b.WriteString(rels)
+		}
+		if pm := privateMemoriesFor(c.ID, privates); pm != "" {
+			b.WriteString(pm)
 		}
 		if ex := exampleDialogues(c, 3); ex != "" {
 			b.WriteString("   说话示例：\n" + ex)
@@ -193,6 +206,31 @@ func relevantRelationships(c *store.Character, persona *store.Persona, chars []*
 		}
 	}
 	return strings.Join(lines, "")
+}
+
+// privateMemoriesFor 渲染某角色的「私下经历」：该角色参与的私聊摘要。
+// 这是单方向的信息隔离——只有参与的角色拿到这段记忆。
+func privateMemoriesFor(characterID string, privates []PrivateMemory) string {
+	var lines []string
+	for _, pm := range privates {
+		if strings.TrimSpace(pm.Summary) == "" {
+			continue
+		}
+		for _, id := range pm.CharacterIDs {
+			if id == characterID {
+				title := pm.Title
+				if title == "" {
+					title = "私聊"
+				}
+				lines = append(lines, fmt.Sprintf("   - 「%s」：%s\n", title, clip(pm.Summary, 500)))
+				break
+			}
+		}
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	return "   私下经历（仅该角色知晓，其他角色并不知情）：\n" + strings.Join(lines, "")
 }
 
 func exampleDialogues(c *store.Character, max int) string {

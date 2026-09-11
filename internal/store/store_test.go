@@ -100,20 +100,32 @@ func TestSessionAndMessages(t *testing.T) {
 		t.Fatalf("图片应挂在回合首条剧情消息上: %v", withImg)
 	}
 
-	// 派生：复制记忆
-	if err := s.SaveSummary(sess.ID, "剧情摘要", msgs[1].Seq, 0); err != nil {
+	// 派生：主线摘要作为 inherited_summary 快照；主线自身摘要不受影响。
+	if err := s.SaveSummary(sess.ID, "主线剧情摘要", msgs[1].Seq, 0); err != nil {
 		t.Fatal(err)
 	}
-	child := &Session{Title: "私聊", ParentID: sess.ID}
+	child := &Session{Title: "私聊", ParentID: sess.ID, InheritedSummary: "主线剧情摘要"}
 	if err := s.CreateSession(child, []string{ca.ID}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.CopyStoryMemory(sess.ID, child.ID); err != nil {
+	cgot, _ := s.GetSession(child.ID)
+	if cgot.InheritedSummary != "主线剧情摘要" || cgot.Summary != "" {
+		t.Fatalf("派生会话记忆字段错误: inherited=%q summary=%q", cgot.InheritedSummary, cgot.Summary)
+	}
+	// 主线可通过 ListChildren 找到私聊，私聊自身摘要另存。
+	if err := s.SaveSummary(child.ID, "私下剧情", 9, 0); err != nil {
 		t.Fatal(err)
 	}
-	cgot, _ := s.GetSession(child.ID)
-	if cgot.Summary != "剧情摘要" {
-		t.Fatalf("摘要未复制: %q", cgot.Summary)
+	children, err := s.ListChildren(sess.ID)
+	if err != nil || len(children) != 1 {
+		t.Fatalf("ListChildren 失败: %v %d", err, len(children))
+	}
+	if children[0].Summary != "私下剧情" || len(children[0].Characters) != 1 || children[0].Characters[0].ID != ca.ID {
+		t.Fatalf("子会话数据不完整: %+v", children[0])
+	}
+	got2, _ := s.GetSession(sess.ID)
+	if got2.Summary != "主线剧情摘要" {
+		t.Fatalf("主线摘要不应被子会话污染: %q", got2.Summary)
 	}
 
 	// 级联删除

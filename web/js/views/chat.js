@@ -14,10 +14,12 @@ function hueOf(str) {
 }
 
 export async function render(root, sessionId) {
-  const [session, payload] = await Promise.all([
+  const [detail, payload] = await Promise.all([
     api.getSession(sessionId),
     api.listMessages(sessionId),
   ]);
+  const session = detail.session;
+  const privateChats = detail.private_chats || [];
   const messages = payload.messages || [];
 
   const charById = new Map((session.characters || []).map((c) => [c.id, c]));
@@ -33,7 +35,7 @@ export async function render(root, sessionId) {
           <div class="head-text">
             <div class="head-title"><span id="head-title">${esc(session.title)}</span>
               ${session.parent_id ? '<span class="badge">私聊</span>' : ''}</div>
-            <div class="head-sub">${esc((session.characters || []).map((c) => c.name).join('、') || '无角色')}</div>
+            <div class="head-sub">${esc((session.characters || []).map((c) => c.name).join('、') || '无角色')}${privateChats.length ? ` · 🔗 ${privateChats.length} 段私聊记忆` : ''}</div>
           </div>
         </div>
         <button class="icon-btn" id="btn-derive" title="发起私聊">💬</button>
@@ -422,7 +424,7 @@ export async function render(root, sessionId) {
     const picked = new Set();
     const s = sheet(`
       <h2>💬 发起私聊</h2>
-      <p class="hint">从本局选择一位或几位角色单独开一个新的对话。私聊会<b>继承主线剧情记忆</b>，且不影响主线走向。</p>
+      <p class="hint">从本局选择一位或几位角色单独开一个新的对话。私聊会<b>继承主线剧情记忆</b>；而你在私聊中的相处，也会成为对应角色带回主线的<b>私下记忆</b>——只有参与私聊的角色知道，其他角色不知情。</p>
       <div class="char-pick">
         ${chars.map((c) => `
           <button type="button" class="pick-chip" data-id="${esc(c.id)}">

@@ -29,7 +29,7 @@ func TestBuildChatMessagesShape(t *testing.T) {
 	}
 	userMsg := &store.Message{Turn: 3, Kind: store.KindUser, Style: store.StyleDirect, Content: "让天下雨"}
 
-	msgs := BuildChatMessages("东方王朝", persona, chars, "此前：一行人抵达客栈。", history, userMsg, testCfg())
+	msgs := BuildChatMessages("东方王朝", persona, chars, "此前：一行人抵达客栈。", nil, history, userMsg, testCfg())
 
 	if msgs[0].Role != "system" || !strings.Contains(msgs[0].Content, "剧情写手") {
 		t.Fatalf("系统提示缺失或错误")
@@ -77,7 +77,7 @@ func TestBuildChatMessagesBudgetDropsOldest(t *testing.T) {
 		history = append(history, &store.Message{Turn: int64(i), Kind: store.KindUser,
 			Style: store.StyleSay, Content: strings.Repeat("这是一条比较长的历史消息，用来撑爆预算。", 3)})
 	}
-	msgs := BuildChatMessages("", nil, chars, "", history, history[len(history)-1], cfg)
+	msgs := BuildChatMessages("", nil, chars, "", nil, history, history[len(history)-1], cfg)
 
 	// 历史必然被大幅裁剪：总消息数远小于 50，且最新一条内容必须保留。
 	if len(msgs) >= 12 {
@@ -86,6 +86,102 @@ func TestBuildChatMessagesBudgetDropsOldest(t *testing.T) {
 	last := msgs[len(msgs)-1]
 	if last.Role != "user" || !strings.Contains(last.Content, "撑爆预算") {
 		t.Fatalf("最新输入丢失：%+v", last)
+	}
+}
+
+func TestPrivateMemoryInjection(t *testing.T) {
+	chars := mkChars()
+	privates := []PrivateMemory{{
+		Title:        "私聊 · 艾莉娅",
+		Summary:      "艾莉娅与玩家私下约定了暗号「北风」，并透露了她对修士的怀疑。",
+		CharacterIDs: []string{"c_a"},
+	}}
+	msgs := BuildChatMessages("", &store.Persona{Name: "林远"}, chars, "", privates, nil, nil, testCfg())
+	sys := msgs[0].Content
+
+	idxA := strings.Index(sys, "1. 艾莉娅")
+	idxB := strings.Index(sys, "2. 老巴德")
+	idxSecret := strings.Index(sys, "北风")
+	if idxA < 0 || idxB < 0 || idxSecret < 0 {
+		t.Fatalf("关键段落缺失: %d %d %d", idxA, idxSecret, idxB)
+	}
+	// 私下经历必须挂在 A 的卡段内（A 之后、B 之前）。
+	if !(idxA < idxSecret && idxSecret < idxB) {
+		t.Fatalf("私下经历未挂在正确角色下: A=%d secret=%d B=%d", idxA, idxSecret, idxB)
+	}
+	if !strings.Contains(sys, "其他角色并不知情") {
+		t.Fatal("缺少知情范围说明")
+	}
+	if !strings.Contains(sys, "其他角色不应表现出知情") {
+		t.Fatal("缺少规则第 6 条")
+	}
+
+	// 无私聊时不应出现该段落（规则第 6 条里的「私下经历」字样除外）。
+	msgs2 := BuildChatMessages("", nil, chars, "", nil, nil, nil, testCfg())
+	if strings.Contains(msgs2[0].Content, "私下经历（仅该角色知晓") {
+		t.Fatal("无私聊时不应出现私下经历段落")
+	}
+}
+
+func TestSessionMemory(t *testing.T) {
+	st, err := store.Open(t.TempDir() + "/mem.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	ca := &store.Character{Name: "艾莉娅"}
+	cb := &store.Character{Name: "老巴德"}
+	_ = st.CreateCharacter(ca)
+	_ = st.CreateCharacter(cb)
+
+	parent := &store.Session{Title: "主线"}
+	if err := st.CreateSession(parent, []string{ca.ID, cb.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SaveSummary(parent.ID, "主线：一行人抵达钟楼。", 5, 0); err != nil {
+		t.Fatal(err)
+	}
+	child := &store.Session{Title: "私聊 · 艾莉娅", ParentID: parent.ID, InheritedSummary: "主线：一行人抵达钟楼。"}
+	if err := st.CreateSession(child, []string{ca.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SaveSummary(child.ID, "私下：艾莉娅与玩家约定了暗号。", 3, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	e := New(st, nil, nil, testCfg())
+
+	// 主线视角：有效摘要 = 自身摘要；私下记忆把 child 摘要挂到 A。
+	// （sessionMemory 使用传入的会话对象，生产路径中总是新加载的；这里重新加载。）
+	parentFresh, err := st.GetSession(parent.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	eff, priv, err := e.sessionMemory(parentFresh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(eff) != "主线：一行人抵达钟楼。" {
+		t.Fatalf("主线有效摘要错误: %q", eff)
+	}
+	if len(priv) != 1 || priv[0].Summary != "私下：艾莉娅与玩家约定了暗号。" || len(priv[0].CharacterIDs) != 1 || priv[0].CharacterIDs[0] != ca.ID {
+		t.Fatalf("私下记忆错误: %+v", priv)
+	}
+
+	// 私聊视角：有效摘要 = 主线（+继承）+ 自身私下；无私聊子级。
+	childFresh, err := st.GetSession(child.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	eff2, priv2, err := e.sessionMemory(childFresh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(eff2, "主线：一行人抵达钟楼。") || !strings.Contains(eff2, "私下：艾莉娅与玩家约定了暗号。") {
+		t.Fatalf("私聊有效摘要错误: %q", eff2)
+	}
+	if len(priv2) != 0 {
+		t.Fatalf("私聊不应有下级私下记忆: %+v", priv2)
 	}
 }
 

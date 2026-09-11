@@ -241,8 +241,14 @@ func TestFullGameFlow(t *testing.T) {
 	// 更新会话
 	jreq(t, ts, "PATCH", "/api/sessions/"+sid, map[string]any{"title": "新标题", "auto_image": false}, 200)
 	got := jreq(t, ts, "GET", "/api/sessions/"+sid, nil, 200)
-	if got["title"] != "新标题" || got["auto_image"] != false {
-		t.Fatalf("会话更新失败: %v %v", got["title"], got["auto_image"])
+	gs := got["session"].(map[string]any)
+	if gs["title"] != "新标题" || gs["auto_image"] != false {
+		t.Fatalf("会话更新失败: %v %v", gs["title"], gs["auto_image"])
+	}
+	// 主线应能看到派生私聊（记忆回流列表）。
+	chats := got["private_chats"].([]any)
+	if len(chats) != 1 || chats[0].(map[string]any)["id"] != cid {
+		t.Fatalf("private_chats 应包含刚派生的私聊: %v", got["private_chats"])
 	}
 
 	// 删除

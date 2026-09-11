@@ -102,15 +102,69 @@ func (e *Engine) historyWindow() int {
 	return e.cfg.Context.RecentMessages + e.cfg.Context.CompactThreshold + 16
 }
 
+// sessionMemory 计算一个会话的有效剧情摘要与本会话的「私下记忆」列表。
+//
+//   - 有效摘要（喂给本会话自己的上下文）：派生私聊 = 主线最新摘要（父会话
+//     存活时动态取，已删除则退回派生时的快照）+ 自己的私下摘要；主线会话
+//     = 自身摘要。
+//   - 私下记忆（回流给本会话内对应角色的）：所有子私聊「自身消息」的摘要。
+//     例如玩家与 A 私聊过，主线里 A 会带着这段私下经历，B 不知情。
+func (e *Engine) sessionMemory(sess *store.Session) (effSummary string, privates []PrivateMemory, err error) {
+	var parts []string
+	if sess.ParentID != "" {
+		parent, perr := e.store.GetSession(sess.ParentID)
+		if perr == nil {
+			parts = append(parts, parent.Summary, parent.InheritedSummary)
+		} else {
+			parts = append(parts, sess.InheritedSummary)
+		}
+	} else {
+		parts = append(parts, sess.InheritedSummary)
+	}
+	parts = append(parts, sess.Summary)
+	for _, p := range parts {
+		if t := strings.TrimSpace(p); t != "" {
+			effSummary = joinNonEmpty(effSummary, t)
+		}
+	}
+
+	children, err := e.store.ListChildren(sess.ID)
+	if err != nil {
+		return effSummary, nil, err
+	}
+	for _, child := range children {
+		if strings.TrimSpace(child.Summary) == "" {
+			continue
+		}
+		pm := PrivateMemory{Title: child.Title, Summary: child.Summary}
+		for _, c := range child.Characters {
+			pm.CharacterIDs = append(pm.CharacterIDs, c.ID)
+		}
+		privates = append(privates, pm)
+	}
+	return effSummary, privates, nil
+}
+
+func joinNonEmpty(a, b string) string {
+	if a == "" {
+		return b
+	}
+	return a + "\n\n" + b
+}
+
 // generate 是开场与回合共用的生成主流程。
 func (e *Engine) generate(ctx context.Context, sess *store.Session, turn int64, userMsg *store.Message, wantImage bool, emit emitFn, history ...*store.Message) error {
 	chars := sess.Characters
 	persona := sess.Persona
 	opening := userMsg == nil
 
+	effSummary, privates, err := e.sessionMemory(sess)
+	if err != nil {
+		return err
+	}
 	parser := NewParser(chars)
 	req := llm.Request{
-		Messages:    BuildChatMessages(sess.Scenario, persona, chars, sess.Summary, history, userMsg, e.cfg),
+		Messages:    BuildChatMessages(sess.Scenario, persona, chars, effSummary, privates, history, userMsg, e.cfg),
 		Temperature: e.cfg.LLM.Temperature,
 		MaxTokens:   e.cfg.LLM.MaxTokens,
 		Mock: llm.MockHint{
@@ -131,7 +185,7 @@ func (e *Engine) generate(ctx context.Context, sess *store.Session, turn int64, 
 		return nil
 	}
 
-	_, err := e.llm.Stream(ctx, req, func(chunk string) error {
+	_, err = e.llm.Stream(ctx, req, func(chunk string) error {
 		return forward(parser.Feed(chunk))
 	})
 	aborted := errors.Is(err, ErrStopGeneration) || ctx.Err() != nil

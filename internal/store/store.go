@@ -42,7 +42,10 @@ func (s *Store) migrate() error {
 		return err
 	}
 	// 轻量列迁移：为旧库补齐新增列。
-	return s.ensureColumn("characters", "relationships", "TEXT NOT NULL DEFAULT '[]'")
+	if err := s.ensureColumn("characters", "relationships", "TEXT NOT NULL DEFAULT '[]'"); err != nil {
+		return err
+	}
+	return s.ensureColumn("sessions", "inherited_summary", "TEXT NOT NULL DEFAULT ''")
 }
 
 // ensureColumn 在表缺少指定列时以 ALTER TABLE 补上。
@@ -106,6 +109,7 @@ id TEXT PRIMARY KEY NOT NULL,
 	auto_image           INTEGER NOT NULL DEFAULT 0,
 	turn_seq             INTEGER NOT NULL DEFAULT 0,
 	summary              TEXT NOT NULL DEFAULT '',
+	inherited_summary    TEXT NOT NULL DEFAULT '',
 	summarized_upto_seq  INTEGER NOT NULL DEFAULT 0,
 	created_at           INTEGER NOT NULL,
 	updated_at           INTEGER NOT NULL

@@ -6,6 +6,10 @@ import (
 )
 
 // Session 是一局游戏（一个对话实例）；派生私聊通过 ParentID 关联主线。
+//
+// Summary 是「本会话自身消息」的滚动摘要：主线会话里即主线剧情，
+// 私聊会话里即私下剧情（供主线按角色召回）。InheritedSummary 是派生时
+// 复制的主线摘要快照，供私聊自身构建上下文用。
 type Session struct {
 	ID                string `json:"id"`
 	Title             string `json:"title"`
@@ -14,7 +18,8 @@ type Session struct {
 	ParentID          string `json:"parent_id"`
 	AutoImage         bool   `json:"auto_image"`
 	TurnSeq           int64  `json:"turn_seq"`
-	Summary           string `json:"summary"` // 滚动剧情摘要（基础长期记忆）
+	Summary           string `json:"summary"`
+	InheritedSummary  string `json:"inherited_summary"`
 	SummarizedUptoSeq int64  `json:"summarized_upto_seq"`
 	CreatedAt         int64  `json:"created_at"`
 	UpdatedAt         int64  `json:"updated_at"`
@@ -32,14 +37,14 @@ type SessionSummary struct {
 	ImageCount   int64  `json:"image_count"`
 }
 
-const sessionCols = `id, title, scenario, persona_id, parent_id, auto_image, turn_seq, summary, summarized_upto_seq, created_at, updated_at`
+const sessionCols = `id, title, scenario, persona_id, parent_id, auto_image, turn_seq, summary, inherited_summary, summarized_upto_seq, created_at, updated_at`
 
 func scanSession(r rowScanner) (*Session, error) {
 	var s Session
 	var personaID, parentID sql.NullString
 	var autoImage int
 	err := r.Scan(&s.ID, &s.Title, &s.Scenario, &personaID, &parentID, &autoImage,
-		&s.TurnSeq, &s.Summary, &s.SummarizedUptoSeq, &s.CreatedAt, &s.UpdatedAt)
+		&s.TurnSeq, &s.Summary, &s.InheritedSummary, &s.SummarizedUptoSeq, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -55,10 +60,10 @@ func (s *Store) CreateSession(sess *Session, characterIDs []string) error {
 	sess.CreatedAt = now()
 	sess.UpdatedAt = sess.CreatedAt
 	return s.tx(func(tx *sql.Tx) error {
-		_, err := tx.Exec(`INSERT INTO sessions (id, title, scenario, persona_id, parent_id, auto_image, turn_seq, summary, summarized_upto_seq, created_at, updated_at)
-			VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+		_, err := tx.Exec(`INSERT INTO sessions (id, title, scenario, persona_id, parent_id, auto_image, turn_seq, summary, inherited_summary, summarized_upto_seq, created_at, updated_at)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
 			sess.ID, sess.Title, sess.Scenario, nullIfEmpty(sess.PersonaID), nullIfEmpty(sess.ParentID),
-			boolInt(sess.AutoImage), 0, sess.Summary, sess.SummarizedUptoSeq, sess.CreatedAt, sess.UpdatedAt)
+			boolInt(sess.AutoImage), 0, sess.Summary, sess.InheritedSummary, sess.SummarizedUptoSeq, sess.CreatedAt, sess.UpdatedAt)
 		if err != nil {
 			return err
 		}
@@ -159,7 +164,7 @@ func (s *Store) ListSessions() ([]*SessionSummary, error) {
 		var autoImage int
 		var preview sql.NullString
 		err := rows.Scan(&item.ID, &item.Title, &item.Scenario, &personaID, &parentID, &autoImage,
-			&item.TurnSeq, &item.Summary, &item.SummarizedUptoSeq, &item.CreatedAt, &item.UpdatedAt,
+			&item.TurnSeq, &item.Summary, &item.InheritedSummary, &item.SummarizedUptoSeq, &item.CreatedAt, &item.UpdatedAt,
 			&preview, &item.MessageCount, &item.ImageCount)
 		if err != nil {
 			return nil, err
@@ -194,13 +199,31 @@ func (s *Store) NextTurn(sessionID string) (int64, error) {
 	return turn, err
 }
 
-// CopyStoryMemory 把主线剧情摘要复制到派生会话，让私聊继承已有记忆。
-func (s *Store) CopyStoryMemory(fromSessionID, toSessionID string) error {
-	_, err := s.db.Exec(`UPDATE sessions SET
-		summary        = (SELECT summary FROM sessions WHERE id=?),
-		summarized_upto_seq = (SELECT summarized_upto_seq FROM sessions WHERE id=?)
-		WHERE id=?`, fromSessionID, fromSessionID, toSessionID)
-	return err
+// ListChildren 返回某会话派生出的全部子会话（含出场角色）。
+// 用于把私聊的「私下剧情摘要」按角色回流到主线提示词。
+func (s *Store) ListChildren(parentID string) ([]*Session, error) {
+	rows, err := s.db.Query(`SELECT `+sessionCols+` FROM sessions WHERE parent_id=? ORDER BY created_at`, parentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*Session
+	for rows.Next() {
+		sess, err := scanSession(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, sess)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for _, sess := range out {
+		if err := s.fillSessionRefs(sess); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }
 
 // SaveSummary 乐观更新滚动摘要：仅当 summarized_upto_seq 仍为期望值时写入，
