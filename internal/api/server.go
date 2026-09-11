@@ -77,7 +77,9 @@ func (s *Server) routes() {
 
 	// 静态资源：生成的图片/上传文件 + 前端 SPA
 	m.Handle("GET /files/", cacheStatic(http.StripPrefix("/files/", http.FileServer(http.Dir(filepath.Join(s.cfg.DataDir, "files"))))))
-	m.Handle("GET /", http.FileServer(http.Dir(s.cfg.WebDir)))
+	// 前端文件要求浏览器每次协商更新（no-cache 仍可用 ETag/Last-Modified 做 304），
+	// 避免更新代码后手机残留旧版 JS。
+	m.Handle("GET /", noCacheStatic(http.FileServer(http.Dir(s.cfg.WebDir))))
 }
 
 // Handler 返回根处理器。
@@ -131,6 +133,14 @@ func cacheStatic(next http.Handler) http.Handler {
 			httpError(w, http.StatusBadRequest, "非法路径")
 			return
 		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// noCacheStatic 前端资源始终协商缓存，保证更新后立即生效。
+func noCacheStatic(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache")
 		next.ServeHTTP(w, r)
 	})
 }

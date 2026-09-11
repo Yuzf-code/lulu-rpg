@@ -15,29 +15,30 @@ async function req(method, url, body) {
   return data;
 }
 
-function p(method) {
-  return (url, body) => req(method, url, body);
+// route(method, url) 返回懒执行的请求函数（不会在模块加载时发请求）。
+function route(method, url) {
+  return (body) => req(method, url, body);
 }
 
 export const api = {
-  config: p('GET')('/api/config'),
+  config: route('GET', '/api/config'),
 
   // 角色卡
-  listCharacters: p('GET')('/api/characters'),
+  listCharacters: route('GET', '/api/characters'),
   getCharacter: (id) => req('GET', `/api/characters/${id}`),
   createCharacter: (body) => req('POST', '/api/characters', body),
   updateCharacter: (id, body) => req('PUT', `/api/characters/${id}`, body),
   deleteCharacter: (id) => req('DELETE', `/api/characters/${id}`),
 
   // 角色档案
-  listPersonas: p('GET')('/api/personas'),
+  listPersonas: route('GET', '/api/personas'),
   createPersona: (body) => req('POST', '/api/personas', body),
   updatePersona: (id, body) => req('PUT', `/api/personas/${id}`, body),
   deletePersona: (id) => req('DELETE', `/api/personas/${id}`),
   setDefaultPersona: (id) => req('POST', `/api/personas/${id}/default`, {}),
 
   // 会话
-  listSessions: p('GET')('/api/sessions'),
+  listSessions: route('GET', '/api/sessions'),
   createSession: (body) => req('POST', '/api/sessions', body),
   getSession: (id) => req('GET', `/api/sessions/${id}`),
   updateSession: (id, body) => req('PATCH', `/api/sessions/${id}`, body),
