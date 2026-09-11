@@ -116,3 +116,23 @@ func TestInspirationAPI(t *testing.T) {
 	// 不存在的会话
 	jreq(t, ts, "POST", "/api/sessions/s_missing/inspiration", map[string]any{}, 404)
 }
+
+func TestReasoningEffortSetting(t *testing.T) {
+	ts := newTestServer(t)
+
+	// 默认 medium
+	r := jreq(t, ts, "GET", "/api/settings", nil, 200)
+	if r["reasoning_effort"] != "medium" {
+		t.Fatalf("默认档位应为 medium: %v", r)
+	}
+
+	// 切换 + 回读
+	jreq(t, ts, "PUT", "/api/settings", map[string]any{"reasoning_effort": "high"}, 200)
+	r = jreq(t, ts, "GET", "/api/settings", nil, 200)
+	if r["reasoning_effort"] != "high" {
+		t.Fatalf("切换后应为 high: %v", r)
+	}
+
+	// 非法档位
+	jreq(t, ts, "PUT", "/api/settings", map[string]any{"reasoning_effort": "ultra"}, 400)
+}

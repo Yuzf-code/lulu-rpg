@@ -123,10 +123,11 @@ func (e *Engine) distillOne(ctx context.Context, text, target, subject string, b
 	fmt.Fprintf(&user, "\n【原文】\n%s", clip(text, maxDistillText))
 
 	out, err := e.llm.Complete(ctx, llm.Request{
-		Messages:    []llm.Message{{Role: llm.RoleSystem, Content: sys}, {Role: llm.RoleUser, Content: user.String()}},
-		Temperature: 0.5,
-		MaxTokens:   e.cfg.LLM.MaxTokens,
-		Mock:        llm.MockHint{Task: llm.TaskDistill, Target: target, Subject: subject},
+		Messages:        []llm.Message{{Role: llm.RoleSystem, Content: sys}, {Role: llm.RoleUser, Content: user.String()}},
+		Temperature:     0.5,
+		MaxTokens:       e.cfg.LLM.MaxTokens,
+		ReasoningEffort: e.ReasoningEffort(),
+		Mock:            llm.MockHint{Task: llm.TaskDistill, Target: target, Subject: subject},
 	})
 	if err != nil {
 		return nil, err
@@ -175,9 +176,10 @@ func (e *Engine) distillStyle(ctx context.Context, text string) (*DistilledStyle
 			{Role: llm.RoleSystem, Content: sys},
 			{Role: llm.RoleUser, Content: clip(text, maxDistillText)},
 		},
-		Temperature: 0.4,
-		MaxTokens:   e.cfg.LLM.MaxTokens,
-		Mock:        llm.MockHint{Task: llm.TaskStyle},
+		Temperature:     0.4,
+		MaxTokens:       e.cfg.LLM.MaxTokens,
+		ReasoningEffort: e.ReasoningEffort(),
+		Mock:            llm.MockHint{Task: llm.TaskStyle},
 	})
 	if err != nil {
 		return nil, err
@@ -267,9 +269,10 @@ func (e *Engine) detectTargets(ctx context.Context, text string) ([]string, erro
 			{Role: llm.RoleSystem, Content: "列出文本中设定信息较丰富的 1~5 个人物名字。只输出 JSON 字符串数组，如 [\"张三\",\"李四\"]，不要解释。"},
 			{Role: llm.RoleUser, Content: clip(text, maxDistillText)},
 		},
-		Temperature: 0.2,
-		MaxTokens:   e.cfg.LLM.MaxTokens,
-		Mock:        llm.MockHint{Task: llm.TaskDetect},
+		Temperature:     0.2,
+		MaxTokens:       e.cfg.LLM.MaxTokens,
+		ReasoningEffort: e.ReasoningEffort(),
+		Mock:            llm.MockHint{Task: llm.TaskDetect},
 	})
 	if err != nil {
 		return nil, err
@@ -313,10 +316,11 @@ func (e *Engine) DraftGreeting(ctx context.Context, seed CardSeed) (string, erro
 		"展示性格与说话方式，结尾给玩家留出接话空间。150字以内，直接输出正文，不要解释。" +
 		"如果给定了世界设定，开场白应贴合该设定。"
 	out, err := e.llm.Complete(ctx, llm.Request{
-		Messages:    []llm.Message{{Role: llm.RoleSystem, Content: sys}, {Role: llm.RoleUser, Content: cardSeedPrompt(seed)}},
-		Temperature: 0.8,
-		MaxTokens:   e.cfg.LLM.MaxTokens,
-		Mock:        llm.MockHint{Task: llm.TaskGreeting, Target: seed.Name},
+		Messages:        []llm.Message{{Role: llm.RoleSystem, Content: sys}, {Role: llm.RoleUser, Content: cardSeedPrompt(seed)}},
+		Temperature:     0.8,
+		MaxTokens:       e.cfg.LLM.MaxTokens,
+		ReasoningEffort: e.ReasoningEffort(),
+		Mock:            llm.MockHint{Task: llm.TaskGreeting, Target: seed.Name},
 	})
 	if err != nil {
 		return "", err
@@ -336,10 +340,11 @@ func (e *Engine) DraftDialogues(ctx context.Context, seed CardSeed) ([]store.Exa
 	sys := "你是互动式RPG的角色卡写手。为指定角色生成 3 组对话示例（体现其性格与说话方式）：\n" +
 		"输出严格 JSON 数组：[{\"user\":\"玩家说的话\",\"char\":\"角色的回答\"}]，不要解释、不要代码块。"
 	out, err := e.llm.Complete(ctx, llm.Request{
-		Messages:    []llm.Message{{Role: llm.RoleSystem, Content: sys}, {Role: llm.RoleUser, Content: cardSeedPrompt(seed)}},
-		Temperature: 0.8,
-		MaxTokens:   e.cfg.LLM.MaxTokens,
-		Mock:        llm.MockHint{Task: llm.TaskDialogues, Target: seed.Name},
+		Messages:        []llm.Message{{Role: llm.RoleSystem, Content: sys}, {Role: llm.RoleUser, Content: cardSeedPrompt(seed)}},
+		Temperature:     0.8,
+		MaxTokens:       e.cfg.LLM.MaxTokens,
+		ReasoningEffort: e.ReasoningEffort(),
+		Mock:            llm.MockHint{Task: llm.TaskDialogues, Target: seed.Name},
 	})
 	if err != nil {
 		return nil, err
@@ -427,10 +432,11 @@ func (e *Engine) Inspiration(ctx context.Context, sess *store.Session) ([]Inspir
 		"- 建议必须紧扣最新剧情，方向多样；\n" +
 		"只输出 JSON 数组，不要解释、不要代码块。"
 	out, err := e.llm.Complete(ctx, llm.Request{
-		Messages:    []llm.Message{{Role: llm.RoleSystem, Content: sys}, {Role: llm.RoleUser, Content: user.String()}},
-		Temperature: 0.9,
-		MaxTokens:   e.cfg.LLM.MaxTokens,
-		Mock:        llm.MockHint{Task: llm.TaskInspiration, PersonaName: personaName(persona), CharNames: charNames(sess.Characters)},
+		Messages:        []llm.Message{{Role: llm.RoleSystem, Content: sys}, {Role: llm.RoleUser, Content: user.String()}},
+		Temperature:     0.9,
+		MaxTokens:       e.cfg.LLM.MaxTokens,
+		ReasoningEffort: e.ReasoningEffort(),
+		Mock:            llm.MockHint{Task: llm.TaskInspiration, PersonaName: personaName(persona), CharNames: charNames(sess.Characters)},
 	})
 	if err != nil {
 		return nil, err

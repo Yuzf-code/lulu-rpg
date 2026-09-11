@@ -173,3 +173,19 @@ func TestSeedDemoDataOnlyOnce(t *testing.T) {
 		t.Fatalf("重复播种")
 	}
 }
+
+func TestSettings(t *testing.T) {
+	s := openTest(t)
+	if v, err := s.GetSetting("reasoning_effort"); err != nil || v != "" {
+		t.Fatalf("不存在的设置应为空: %q %v", v, err)
+	}
+	if err := s.SetSetting("reasoning_effort", "high"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetSetting("reasoning_effort", "low"); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := s.GetSetting("reasoning_effort"); v != "low" {
+		t.Fatalf("upsert 失败: %q", v)
+	}
+}

@@ -42,8 +42,8 @@ type LLMConfig struct {
 	Temperature float32
 	MaxTokens   int // 0 = 不限制（请求中不携带 max_tokens，由模型自然停止）
 	Timeout     time.Duration
-	// ReasoningEffort 思考型模型（qwen3 等）的推理力度：设为 "none" 关闭
-	// 思考，避免辅助任务（蒸馏/风格/灵感）的输出预算被思考耗尽。
+	// ReasoningEffort 思考型模型推理力度的初始值（none/low/medium/high）。
+	// 运行时可在前端切换，切换后持久化到数据库，此值仅作首次默认。
 	ReasoningEffort string
 }
 
@@ -85,7 +85,7 @@ func Load() (*Config, error) {
 			MaxTokens:   envInt("LLM_MAX_TOKENS", 0), // 0 = 不限制（请求中省略该字段）
 			// 单次请求超时；本地小模型蒸馏/长生成较慢，默认放宽到 30 分钟。
 			Timeout:         time.Duration(envInt("LLM_TIMEOUT_SECONDS", 1800)) * time.Second,
-			ReasoningEffort: strings.ToLower(env("LLM_REASONING_EFFORT", "")),
+			ReasoningEffort: strings.ToLower(env("LLM_REASONING_EFFORT", "medium")),
 		},
 		Image: ImageConfig{
 			BaseURL:     strings.TrimRight(env("IMG_BASE_URL", ""), "/"),

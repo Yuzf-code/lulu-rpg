@@ -86,7 +86,7 @@ func (c *OpenAICompat) do(ctx context.Context, req Request, stream bool, onChunk
 		Messages:        req.Messages,
 		Temperature:     req.Temperature,
 		MaxTokens:       req.MaxTokens,
-		ReasoningEffort: c.ReasoningEffort,
+		ReasoningEffort: reasoningEffortOf(req, c),
 		Stream:          stream,
 	})
 	if err != nil {
@@ -211,6 +211,14 @@ func (c *OpenAICompat) Complete(ctx context.Context, req Request) (string, error
 		return nil
 	})
 	return full.String(), err
+}
+
+// reasoningEffortOf 请求级设置优先，回退到客户端默认。
+func reasoningEffortOf(req Request, c *OpenAICompat) string {
+	if req.ReasoningEffort != "" {
+		return req.ReasoningEffort
+	}
+	return c.ReasoningEffort
 }
 
 func readErrorBody(r io.Reader) string {

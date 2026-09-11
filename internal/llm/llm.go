@@ -45,7 +45,9 @@ type Request struct {
 	Messages    []Message
 	Temperature float32
 	MaxTokens   int
-	Mock        MockHint
+	// ReasoningEffort 覆盖客户端默认的思考档位（none/low/medium/high）。
+	ReasoningEffort string
+	Mock            MockHint
 }
 
 // Provider 是大模型接入的最小接口。

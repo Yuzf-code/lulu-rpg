@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
@@ -150,6 +151,11 @@ id TEXT PRIMARY KEY NOT NULL,
 );
 CREATE INDEX IF NOT EXISTS idx_images_session ON images(session_id, turn);
 
+CREATE TABLE IF NOT EXISTS meta (
+	key   TEXT PRIMARY KEY NOT NULL,
+	value TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS styles (
 	id          TEXT PRIMARY KEY NOT NULL,
 	name        TEXT NOT NULL,
@@ -171,6 +177,23 @@ func NewID(prefix string) string {
 		return fmt.Sprintf("%s_%x", prefix, time.Now().UnixNano())
 	}
 	return prefix + "_" + hex.EncodeToString(b)
+}
+
+// GetSetting 读取运行时设置项；不存在返回空串。
+func (s *Store) GetSetting(key string) (string, error) {
+	var v string
+	err := s.db.QueryRow(`SELECT value FROM meta WHERE key=?`, key).Scan(&v)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return v, err
+}
+
+// SetSetting 写入（upsert）运行时设置项。
+func (s *Store) SetSetting(key, value string) error {
+	_, err := s.db.Exec(`INSERT INTO meta (key, value) VALUES (?,?)
+		ON CONFLICT(key) DO UPDATE SET value=excluded.value`, key, value)
+	return err
 }
 
 func nullStr(s sql.NullString) string {

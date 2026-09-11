@@ -275,6 +275,16 @@ select { appearance: auto; }
 /* 灵感面板 */
 .composer { position: relative; }
 .idea-btn { margin-left: auto; }
+.think-sel {
+  width: auto;
+  padding: 3px 6px;
+  font-size: 12.5px;
+  border-radius: 99px;
+  background: transparent;
+  border-color: var(--line);
+  color: var(--text-dim);
+  cursor: pointer;
+}
 .insp-panel {
   position: absolute;
   left: 12px; right: 12px;

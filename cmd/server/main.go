@@ -78,6 +78,13 @@ func main() {
 	}
 
 	eng := game.New(st, lp, ip, cfg)
+	// 思考档位：数据库保存值 > 环境变量（默认 medium）。
+	if saved, err := st.GetSetting("reasoning_effort"); err == nil && saved != "" {
+		eng.SetReasoningEffort(saved)
+		logger.Printf("思考档位（数据库保存）：%s", saved)
+	} else {
+		eng.SetReasoningEffort(cfg.LLM.ReasoningEffort)
+	}
 	srv := api.New(st, eng, cfg)
 
 	httpServer := &http.Server{

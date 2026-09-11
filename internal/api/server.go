@@ -39,6 +39,8 @@ func (s *Server) routes() {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 	m.HandleFunc("GET /api/config", s.getConfig)
+	m.HandleFunc("GET /api/settings", s.getSettings)
+	m.HandleFunc("PUT /api/settings", s.updateSettings)
 
 	// 角色卡
 	m.HandleFunc("GET /api/characters", s.listCharacters)

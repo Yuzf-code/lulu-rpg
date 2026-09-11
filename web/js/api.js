@@ -58,6 +58,10 @@ export const api = {
   generateCardDraft: (kind, seed) => req('POST', '/api/characters/generate-draft', { kind, ...seed }),
   inspiration: (sessionId) => req('POST', `/api/sessions/${sessionId}/inspiration`, {}),
 
+  // 运行时设置
+  getSettings: () => req('GET', '/api/settings'),
+  updateSettings: (body) => req('PUT', '/api/settings', body),
+
   // 写作风格
   listStyles: () => req('GET', '/api/styles'),
   createStyle: (body) => req('POST', '/api/styles', body),

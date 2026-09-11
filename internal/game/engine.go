@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"lulu-rpg/internal/config"
@@ -23,6 +24,19 @@ type Engine struct {
 	llm   llm.Provider
 	img   imggen.Provider
 	cfg   *config.Config
+
+	reasoning atomic.Value // 思考档位（运行时可切换，持久化在数据库）
+}
+
+// SetReasoningEffort 设置思考档位（none/low/medium/high）。
+func (e *Engine) SetReasoningEffort(level string) { e.reasoning.Store(level) }
+
+// ReasoningEffort 返回当前思考档位，默认 medium。
+func (e *Engine) ReasoningEffort() string {
+	if v, ok := e.reasoning.Load().(string); ok && v != "" {
+		return v
+	}
+	return "medium"
 }
 
 // New 创建引擎；img 可为 nil（未配置生图）。
@@ -168,9 +182,10 @@ func (e *Engine) generate(ctx context.Context, sess *store.Session, turn int64, 
 	}
 	parser := NewParser(chars)
 	req := llm.Request{
-		Messages:    BuildChatMessages(sess.Scenario, persona, chars, styleText, effSummary, privates, history, userMsg, e.cfg),
-		Temperature: e.cfg.LLM.Temperature,
-		MaxTokens:   e.cfg.LLM.MaxTokens,
+		Messages:        BuildChatMessages(sess.Scenario, persona, chars, styleText, effSummary, privates, history, userMsg, e.cfg),
+		Temperature:     e.cfg.LLM.Temperature,
+		MaxTokens:       e.cfg.LLM.MaxTokens,
+		ReasoningEffort: e.ReasoningEffort(),
 		Mock: llm.MockHint{
 			Opening:     opening,
 			Turn:        turn,
@@ -367,9 +382,10 @@ func (e *Engine) maybeCompact(sessionID string) {
 			{Role: llm.RoleSystem, Content: sys},
 			{Role: llm.RoleUser, Content: sb.String()},
 		},
-		Temperature: 0.3,
-		MaxTokens:   e.cfg.LLM.MaxTokens,
-		Mock:        llm.MockHint{Task: llm.TaskSummary, CharNames: charNames(sess.Characters)},
+		Temperature:     0.3,
+		MaxTokens:       e.cfg.LLM.MaxTokens,
+		ReasoningEffort: e.ReasoningEffort(),
+		Mock:            llm.MockHint{Task: llm.TaskSummary, CharNames: charNames(sess.Characters)},
 	}
 	out, err := e.llm.Complete(ctx, req)
 	if err != nil {
